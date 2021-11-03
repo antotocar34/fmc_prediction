@@ -9,3 +9,14 @@ Things to Do:
 
 -Ensure that these predictions of LFMC are actually useful.
 -
+
+
+Ideas:
+
+-Plants can be categoirzed into so called high-responding and low-responding which reflects their correlation to seasonal variation 
+or immediate rainfall. Broadly speaking drought indices/meteorological data appears to generate decent predictions of around = 0.8 (see spanish study)
+But, the spatial variance and especially the results for low-responding plants are much poorer as suggested by the evaluation of drought indices article.
+That article also suggests that improvements can be made with more mechanistic indices that take into account plant traits (such as low responding plants 
+having longer roots), local parametrization of soil characteristics, vegetation cover, etc. More mechanistic drought index is potentially RWC.
+
+-Drought indices are usually just calculated in some way from meteorological data. 
