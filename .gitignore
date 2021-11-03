@@ -1,0 +1,16 @@
+# For Antoine's virtualenv setup
+pyproject.toml
+poetry.lock
+
+# Unused python files
+__pychache__
+
+# LaTeX compiler files
+*.log
+*.toc
+*.gz
+*.aux
+*.out
+*.synctex
+*.synctex.gz
+*.tmp
