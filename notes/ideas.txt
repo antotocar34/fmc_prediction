@@ -20,3 +20,33 @@ That article also suggests that improvements can be made with more mechanistic i
 having longer roots), local parametrization of soil characteristics, vegetation cover, etc. More mechanistic drought index is potentially RWC.
 
 -Drought indices are usually just calculated in some way from meteorological data. 
+
+Potential Data needed:
+
+Meteorological data
+
+Temperature
+Humidity
+Solar radiation (net, global)
+Wind
+
+Mechanistic data
+
+Soil Temperature
+Soil water reserve
+Vegetation cover
+Soil properties(type of soil, how much it can absorb water? insert science here)
+
+Plant data
+
+root length
+root thickness
+leaf size
+plant type
+plant size
+
+Temporal data
+
+season
+proximity to wildfire
+
