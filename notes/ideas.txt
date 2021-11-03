@@ -5,3 +5,7 @@ Questions to Answer:
 - Where to get plant characteristics?
 - 
 
+Things to Do:
+
+-Ensure that these predictions of LFMC are actually useful.
+-
