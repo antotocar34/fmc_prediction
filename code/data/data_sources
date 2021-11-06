@@ -1,1 +1,18 @@
+
+US FMC Data
 https://www.wfas.net/, 
+
+Mega database of plant characteristics
+https://www.try-db.org/TryWeb/Home.php
+
+Apparently a databse of FMC measurements for the Mediterranean
+http://www.reseauhydrique.dpfm.fr/
+Data is very dirty see: https://www.researchgate.net/publication/324995898_Live_fuel_moisture_content_LFMC_time_series_for_multiple_sites_and_species_in_the_French_Mediterranean_area_since_1996
+Cleaned version from theat paper here:
+https://zenodo.org/record/162978#.YYZfibskHs0
+
+NDVI Data (Index on "greenness" of plants/world)
+https://developers.google.com/earth-engine/datasets/catalog/NOAA_CDR_AVHRR_NDVI_V5?hl=en
+
+LST (Land Surface Temperature - Daily Global)
+https://developers.google.com/earth-engine/datasets/catalog/MODIS_006_MOD11A1?hl=en

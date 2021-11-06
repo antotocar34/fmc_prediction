@@ -21,6 +21,24 @@ having longer roots), local parametrization of soil characteristics, vegetation 
 
 -Drought indices are usually just calculated in some way from meteorological data. 
 
+- Some studies have indicated the potential of NDVI + LST to make decent estimates for something such as grasslands (maybe can just be
+retrained on other species? Authors note would potentially be difficult on species that do not have as strong a relationship
+between vegetation moisture content and greenness( chlorophyll content). 
+
+"In spite of the great potential and interest that approaches based on RTM have for FMC estimation, empirical fittings are also critical for operational applications because they
+provide faster and easily operated models of known accuracy. Additionally, RTM models do not include thermal information that is vital, especially in fuels which are more
+adapted to summer drought, which is the case in most Mediterranean shrubs. In these species, FMC cannot be accurately estimated using just NDVI values because chro-
+lophyll and LAI changes caused by FMC variations are less apparent in shrub species than in grasslands. The applicability of the empirical model to other shrub
+species may be based on their physiological similarities with C. ladanifer. The paper has shown that FMC trends of R.
+officinalis are also well estimated from the empirical model. A more physical basis to extend this to other shrub species should rely on physiological differences between the refer-
+ence and the desired species, which may be based on specific leaf weight or LAI factors, but this hypothesis should be tested in future work"
+
+- Potential idea is maybe bring in plant characteristics (that's a ton of parameters) to help in this estimation? Maybe gives some spatial robustness.
+- Other potential idea is maybe plant characteristics (especially the ones that relate between water content and cholorphyll levels) are considered
+a latent variable and might come out in clustering in some way(not sure if thinking about this correctly). 
+- So now I am thinking a combination of straightforward meteo index (similar to spanish study) + NDVI + LST + lots of plant characteristics + geo location in some combination?
+
+
 Potential Data needed:
 
 Meteorological data
