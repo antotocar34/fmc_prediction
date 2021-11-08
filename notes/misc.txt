@@ -1,0 +1,19 @@
+- DEFINITION OF MOISTURE CONTENT
+
+    The definition of moisture content used here is the ratio of the weight of the water 
+    contained to the dry weight of the material, expressed as a percentage.  The simple 
+    formula for percent moisture content is: 
+     
+    Weight of water in sample  (100) = percent moisture content / Dry weight of sample 
+     
+    DEFINITION OF LIVE FUEL MOISTURE 
+
+    Live Fuel Moisture 
+    Live fuels consist of: conifer needles; twigs and leaves of shrubs (evergreen and 
+    deciduous); and green (live) grasses and forbs. 
+ 
+
+
+
+ - https://cran.r-project.org/web/packages/sperrorest/vignettes/spatial-modeling-use-case.html#ref-James2013
+   Some useful links on spatial data anlaysis
