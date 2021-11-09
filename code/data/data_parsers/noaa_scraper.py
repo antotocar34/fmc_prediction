@@ -1,9 +1,12 @@
 #%%
-import requests
+import requests, pickle, os
+from tqdm import tqdm
 import pandas as pd
-from re import search
-from collections import defaultdict
+from geopy.distance import distance as geodist
+os.chdir(os.path.dirname(os.path.realpath(__file__)))
+os.chdir("../../..")
 
+#NOAA API Info
 token = "JcvRdALGKywGfyxsGdulfWCXhJBhpqFO"
 noaa_api = "https://www.ncdc.noaa.gov/cdo-web/api/v2/"
 parameters = {
@@ -16,6 +19,8 @@ parameters = {
     "data" : ["datasetid", "locationid", "stationid", "datatypeid", "startdate", "enddate", "units", "sortfield", "sortorder", "limit", "offset", "includemetadata"]
 }
 # %%
+#Parse and Scrape Functions
+
 def get_noaa(endpoint, results = True, url = noaa_api, token = token):
     '''Returns the list of results from a noaa api request'''
     headers = {"token" : token}
@@ -25,7 +30,6 @@ def get_noaa(endpoint, results = True, url = noaa_api, token = token):
     else:
         return r.json()
 
-# %%
 def get_endpoint(data:str, override = False, parameters = parameters, **options):
     '''Sets an endpoint to be passed to noaa api.
 
@@ -49,21 +53,39 @@ def get_endpoint(data:str, override = False, parameters = parameters, **options)
         else:
             optional_params.append(f"{key}={option}")   
     return f"{data}?{'&'.join(optional_params)}"
-# %%
-noaa = {}
-for endpoint in parameters.keys():
-    renamed = {entry["name"]:entry for entry in get_noaa(noaa_api, endpoint)}
-    noaa[endpoint] = renamed
+
+def get_stationid(site_coord, station_df):
+    '''Given site_coord as a (lat, long) tuple and a station df outputted by NOAA API, 
+    return a Station ID.'''
+    distance = [geodist(site_coord, (station_df.loc[i, "latitude"], station_df.loc[i, "longitude"])).km for i in station_df.index]
+    return station_df.loc[distance.index(min(distance)), "id"]
+
+def station_dict(wfas_df, stateid):
+    '''Given a clean dataframe from WFAS with Lat, Long columns, and a stateid for the NOAA API's locationid (ST), 
+    return a dictionary mapping site names from WFAS to closest station's ID'''
+    stations = pd.DataFrame.from_records(get_noaa(get_endpoint("stations", locationid=stateid, limit = 1000)))
+    grouped_sites = wfas_df.groupby("Site").mean()
+    station_dict = {}
+    for site in tqdm(grouped_sites.index):
+        site_coord = (grouped_sites.loc[site, "Latitude"], grouped_sites.loc[site, "Longitude"])
+        station_dict[site] = get_stationid(site_coord, stations)
+    return station_dict
 #%%
 #Shows location data via state. California is FIPS:06
 get_noaa(get_endpoint("locations", locationcategoryid="ST"))
 #%%
 #Show all weather stations in California with max limit.
 ca_stations = pd.DataFrame.from_records(get_noaa(get_endpoint("stations", locationid="FIPS:06", limit = 1000)))
-# %%
-def search_for(regex, data, col):
-    return data[data[col].apply(lambda x: search(regex, x)).notnull()]
 
-search_for("yosemite".upper(), ca_stations, "name")
-
+#%%
+#Load cleaned WFAS data, match to NOAA weather station IDs, save dictionary.
+stateid = "FIPS:06"
+with open("code/data/clean_data/wfas/SOCC_cleaned.pkl", "rb") as infile:
+    socc = pickle.load(infile)
+socc_stations = station_dict(socc, stateid)
+with open("code/data/data_parsers/SOCC_Stationid_dict.pkl") as outfile:
+    pickle.dump(socc_stations, outfile)
 # %%
+'''Next steps:
+1) Function to get cleaned NOAA weather and/or rainfail datasets based on date and stationID
+2) Apply this function to SOCC cleaned data to form a DF of weather data that can be matched to WFAS DF'''
