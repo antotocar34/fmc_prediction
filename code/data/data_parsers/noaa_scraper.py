@@ -1,5 +1,7 @@
 #%%
 import requests
+import pandas as pd
+from re import search
 from collections import defaultdict
 
 token = "JcvRdALGKywGfyxsGdulfWCXhJBhpqFO"
@@ -8,8 +10,8 @@ parameters = {
     "datasets": ["datatypeid", "locationid", "stationid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
     "datacategories" : ["datasetid", "locationid", "stationid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
     "datatypes" : ["datasetid", "datacategoryid", "locationid", "stationid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
-    "locationcategoriess": ["datasetid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
-    "locations": ["datasetid", "datacategoryid", "locationid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
+    "locationcategories": ["datasetid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
+    "locations": ["datasetid", "datacategoryid", "locationcategoryid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
     "stations" : ["datasetid", "datacategoryid", "locationid", "datatypeid", "startdate", "enddate", "extent", "sortfield", "sortorder", "limit", "offset"],
     "data" : ["datasetid", "locationid", "stationid", "datatypeid", "startdate", "enddate", "units", "sortfield", "sortorder", "limit", "offset", "includemetadata"]
 }
@@ -53,5 +55,15 @@ for endpoint in parameters.keys():
     renamed = {entry["name"]:entry for entry in get_noaa(noaa_api, endpoint)}
     noaa[endpoint] = renamed
 #%%
-locs = get_noaa(noaa_api, get_endpoint("locations"))
+#Shows location data via state. California is FIPS:06
+get_noaa(get_endpoint("locations", locationcategoryid="ST"))
+#%%
+#Show all weather stations in California with max limit.
+ca_stations = pd.DataFrame.from_records(get_noaa(get_endpoint("stations", locationid="FIPS:06", limit = 1000)))
+# %%
+def search_for(regex, data, col):
+    return data[data[col].apply(lambda x: search(regex, x)).notnull()]
+
+search_for("yosemite".upper(), ca_stations, "name")
+
 # %%
