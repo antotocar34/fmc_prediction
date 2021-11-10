@@ -2,10 +2,11 @@
 import pandas as pd
 import os
 from re import search
-os.chdir(os.path.dirname(os.path.realpath(__file__)))
-os.chdir("../../..")
 
-file = "code/data/raw_data/try/try_plant_traits.txt"
+STATS_PROJ = os.getenv('STATS_PROJ')
+assert STATS_PROJ is not None, "Failed to load environment variable correctly"
+
+file = f"{STATS_PROJ}/code/data/raw_data/try/try_plant_traits.txt"
 traits = pd.read_table(file, sep="\t", skipinitialspace=True, encoding="latin-1", skiprows=3, usecols=range(5))
 # %%
 def search_trait(regex: str):
