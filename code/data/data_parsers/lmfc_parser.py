@@ -12,12 +12,22 @@ assert STATS_PROJ is not None, "Failed to load environment variable correctly"
 
 def read_wfas_table(filename, path):
     file = os.path.join(path, filename)
-    data = pd.read_table(file, sep="\t", date_parser = lambda date: datetime.strptime(date, "%Y-%m-%d"), parse_dates=[4], skipinitialspace=True, usecols=list(range(7)))
+    data = pd.read_table(
+        file,
+        sep="\t",
+        date_parser=lambda date: datetime.strptime(date, "%Y-%m-%d"),
+        parse_dates=[4],
+        skipinitialspace=True,
+        usecols=list(range(7)),
+    )
     return data
 
-def get_geocode(address, geocoder = geocode, location = None):
-    '''Iteratively tries shorter versions of the address split on whitespace in the geocoder until a geocode is found.
-    Optionally append info such as state or country in location.'''
+
+def get_geocode(address, geocoder, location=None):
+    """
+    Iteratively tries shorter versions of the address split on whitespace in the geocoder until a geocode is found.
+    Optionally append info such as state or country in location.
+    """
     chars = ["-", "/", ",", ";", "."]
     for char in chars:
         address = address.replace(char, " ")
@@ -26,26 +36,29 @@ def get_geocode(address, geocoder = geocode, location = None):
     for i in range(len(address_list), 0, -1):
         if code is None:
             code = geocoder(f'{" ".join(address_list[:i])} {location}')
-        else: 
+        else:
             break
     if code is None:
         print(f"No geo location found for {address}")
     return code
 
-def parse_sites(df, location = None, colname="Site"):
-    '''Parses sites to latitudes and longitutes as dictionaries. Also raises a list of no_codes. 
-    Returns lats, longs, no_codes.'''
+
+def parse_sites(df, geocoder, location=None, colname="Site"):
+    """Parses sites to latitudes and longitutes as dictionaries. Also raises a list of no_codes.
+    Returns lats, longs, no_codes."""
     no_codes = []
     latitudes = {}
     longitudes = {}
     for site in df[colname].unique():
-        code = get_geocode(site, geocoder=geocode, location = location)
+        code = get_geocode(site, geocoder=geocoder, location=location)
         if code is None:
             no_codes.append(site)
         else:
             latitudes[site] = code.latitude
             longitudes[site] = code.longitude
     return latitudes, longitudes, no_codes
+
+
 # %%
 # Instantiate and load data from filelist
 geolocator = Nominatim(user_agent="wfas")
@@ -58,16 +71,18 @@ state = "California, USA"
 data = read_wfas_table(filelist[8], path)  # filelist[8] is SOCC data
 
 #%%
-#Get lats and longs, here. Manually inspect no_codes before mapping to dataframe
-lats, longs, no_codes = parse_sites(data, location = state)
+# Get lats and longs, here. Manually inspect no_codes before mapping to dataframe
+lats, longs, no_codes = parse_sites(data, geocoder=geocode, location=state)
 #%%
-#Manual fixing of missing codes. 
+
+# Manual fixing of missing codes.
 lats["Summit1"], lats["Summit2"] = lats["Summit"], lats["Summit"]
 longs["Summit1"], longs["Summit2"] = longs["Summit"], longs["Summit"]
 lats[no_codes[0]], longs[no_codes[0]] = 33.4371332, -117.3336908
 lats[no_codes[1]], longs[no_codes[1]] = 33.4371332, -117.3336908
 #%%
-#Add Lat and Long columns to df
+
+# Add Lat and Long columns to df
 data["Latitude"] = data["Site"].map(lats)
 data["Longitude"] = data["Site"].map(longs)
 # %%
@@ -81,7 +96,7 @@ with open(f"{STATS_PROJ}/code/data/clean_data/wfas/SOCC_cleaned.pkl", "wb") as o
 
 # # %%
 
-# #Simple plot to look at observations made per year. 
+# #Simple plot to look at observations made per year.
 
 # data.groupby(data["Date"].dt.year).count().plot(kind="bar")
 
