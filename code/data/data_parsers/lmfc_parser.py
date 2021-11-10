@@ -5,8 +5,10 @@ from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
 import pickle
 from datetime import datetime
-os.chdir(os.path.dirname(os.path.realpath(__file__)))
-os.chdir("../../..")
+
+STATS_PROJ = os.getenv('STATS_PROJ')
+assert STATS_PROJ is not None, "Failed to load environment variable correctly"
+
 
 def read_wfas_table(filename, path):
     file = os.path.join(path, filename)
@@ -45,15 +47,16 @@ def parse_sites(df, location = None, colname="Site"):
             longitudes[site] = code.longitude
     return latitudes, longitudes, no_codes
 # %%
-#Instantiate and load data from filelist
-geolocator = Nominatim(user_agent ="wfas")
+# Instantiate and load data from filelist
+geolocator = Nominatim(user_agent="wfas")
 geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
-path = "code/data/raw_data"
-filelist = os.listdir("code/data/raw_data/wfas")
+path = f"{STATS_PROJ}/code/data/raw_data/wfas"
+filelist = os.listdir(path)
 filelist.sort()
 
 state = "California, USA"
-data = read_wfas_table(filelist[8], path) #filelist[8] is SOCC data
+data = read_wfas_table(filelist[8], path)  # filelist[8] is SOCC data
+
 #%%
 #Get lats and longs, here. Manually inspect no_codes before mapping to dataframe
 lats, longs, no_codes = parse_sites(data, location = state)
@@ -68,8 +71,9 @@ lats[no_codes[1]], longs[no_codes[1]] = 33.4371332, -117.3336908
 data["Latitude"] = data["Site"].map(lats)
 data["Longitude"] = data["Site"].map(longs)
 # %%
-#Export clean data
-with open("code/data/clean_data/wfas/SOCC_cleaned.pkl", "wb") as outfile:
+
+# Export clean data
+with open(f"{STATS_PROJ}/code/data/clean_data/wfas/SOCC_cleaned.pkl", "wb") as outfile:
     pickle.dump(data, outfile)
 
 

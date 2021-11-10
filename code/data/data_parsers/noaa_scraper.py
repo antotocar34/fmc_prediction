@@ -3,8 +3,9 @@ import requests, pickle, os
 from tqdm import tqdm
 import pandas as pd
 from geopy.distance import distance as geodist
-os.chdir(os.path.dirname(os.path.realpath(__file__)))
-os.chdir("../../..")
+
+STATS_PROJ = os.getenv('STATS_PROJ')
+assert STATS_PROJ is not None, "Failed to load environment variable correctly"
 
 #NOAA API Info
 token = "JcvRdALGKywGfyxsGdulfWCXhJBhpqFO"
@@ -80,10 +81,10 @@ ca_stations = pd.DataFrame.from_records(get_noaa(get_endpoint("stations", locati
 #%%
 #Load cleaned WFAS data, match to NOAA weather station IDs, save dictionary.
 stateid = "FIPS:06"
-with open("code/data/clean_data/wfas/SOCC_cleaned.pkl", "rb") as infile:
+with open(f"{STATS_PROJ}/code/data/clean_data/wfas/SOCC_cleaned.pkl", "rb") as infile:
     socc = pickle.load(infile)
 socc_stations = station_dict(socc, stateid)
-with open("code/data/data_parsers/SOCC_Stationid_dict.pkl") as outfile:
+with open(f"{STATS_PROJ}/code/data/data_parsers/SOCC_Stationid_dict.pkl") as outfile:
     pickle.dump(socc_stations, outfile)
 # %%
 '''Next steps:
