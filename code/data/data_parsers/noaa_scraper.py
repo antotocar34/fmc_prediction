@@ -5,6 +5,7 @@ import pandas as pd
 from geopy.distance import distance as geodist
 from functools import partial
 from datetime import datetime, date, timedelta
+import time
 
 # STATS_PROJ = os.getenv('STATS_PROJ')
 # assert STATS_PROJ is not None, "Failed to load environment variable correctly"
@@ -21,7 +22,7 @@ parameters = {
     "datatypes" : ["datasetid", "datacategoryid", "locationid", "stationid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
     "locationcategories": ["datasetid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
     "locations": ["datasetid", "datacategoryid", "locationcategoryid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
-    "stations" : ["datasetid", "datacategoryid", "locationid", "datatypeid", "startdate", "enddate", "extent", "sortfield", "sortorder", "limit", "offset"],
+    "stations" : ["datasetid", "datacategoryid", "locationcategoryid", "datatypeid", "startdate", "enddate", "extent", "sortfield", "sortorder", "limit", "offset"],
     "data" : ["datasetid", "locationid", "stationid", "datatypeid", "startdate", "enddate", "units", "sortfield", "sortorder", "limit", "offset", "includemetadata"]
 }
 # %%
@@ -61,6 +62,7 @@ def get_noaa(data:str, url = noaa_api, token = token, results = True, override =
     endpoint = f"{data}?{'&'.join(optional_params)}"
     headers = {"token" : token}
     r = requests.get(url=url + endpoint, headers = headers)
+    time.sleep(0.5)
     if results == True:
         return r.json()["results"]
     else:
@@ -72,22 +74,22 @@ def get_stationid(site_coord, station_df):
     distance = [geodist(site_coord, (station_df.loc[i, "latitude"], station_df.loc[i, "longitude"])).km for i in station_df.index]
     return station_df.loc[distance.index(min(distance)), "id"]
 
-def station_dict(wfas_df, stateid, datasetid):
-    '''Given a clean dataframe from WFAS with Lat, Long columns, and a stateid for the NOAA API's locationid (ST), 
-    return a dictionary mapping site names from WFAS to closest station's ID'''
-    stations = pd.DataFrame.from_records(get_noaa("stations", datasetid=datasetid, locationid=stateid, limit = 1000))
-    grouped_sites = wfas_df.groupby("Site").mean()
-    station_dict = {}
-    for site in tqdm(grouped_sites.index):
-        site_coord = (grouped_sites.loc[site, "Latitude"], grouped_sites.loc[site, "Longitude"])
-        station_dict[site] = get_stationid(site_coord, stations)
-    return station_dict
+# def station_dict(wfas_df, stateid, datasetid):
+#     '''Given a clean dataframe from WFAS with Lat, Long columns, and a stateid for the NOAA API's locationid (ST), 
+#     return a dictionary mapping site names from WFAS to closest station's ID'''
+#     stations = pd.DataFrame.from_records(get_noaa("stations", datasetid=datasetid, locationid=stateid, limit = 1000))
+#     grouped_sites = wfas_df.groupby("Site").mean()
+#     station_dict = {}
+#     for site in tqdm(grouped_sites.index):
+#         site_coord = (grouped_sites.loc[site, "Latitude"], grouped_sites.loc[site, "Longitude"])
+#         station_dict[site] = get_stationid(site_coord, stations)
+#     return station_dict
 #%%
 #Shows location data via state. California is FIPS:06, Arizona is FIPS:04, nevada is FIPS:32
-get_noaa("locations", locationcategoryid="ST", limit = 1000)
+#get_noaa("locations", locationcategoryid="ST", limit = 1000)
 #%%
 #Load cleaned WFAS data, match to NOAA weather station IDs, save dictionary.
-stateid = "FIPS:06"
+
 with open("code/data/clean_data/wfas/SOCC_cleaned.pkl", "rb") as infile:
     socc = pickle.load(infile)
 
@@ -105,27 +107,118 @@ def get_available_types(noaa_dataset, maxdate, mindate, locationid):
     return all_types
 
 GHCND_types = get_available_types("GHCND", maxdate = max(socc["Date"]), mindate=min(socc["Date"]), locationid="FIPS:06")
-GSOM_types = get_available_types("GSOM", maxdate = max(socc["Date"]) - timedelta(days=62), mindate=min(socc["Date"]), locationid="FIPS:06")
+# GSOM_types = get_available_types("GSOM", maxdate = max(socc["Date"]) - timedelta(days=62), mindate=min(socc["Date"]), locationid="FIPS:06")
 
 '''Data types of interest:
-GHCND: AWND, MDPR, PRCP, SNOW, TAVG, TMAX, TMIN, WSFG, WDFG, WT01, WT04, WT08
+GHCND: AWND, DAPR, MDPR, PRCP, SNOW, TAVG, TMAX, TMIN, WSFG, WDFG, WT01, WT04, WT08
 GSOM: TAVG, TMAX, TMIN, TSUN, CLDD, DP01, DP10, DT00, DT32, DX32, DX70, DX90, , EVAP, 
 MN01, MN02, MN03, MX01, MX02, MX03, PRCP'''
 
+
 # %%
-#So far this function retrieves the particular data given the paramaters by finding the nearest weather station that actually has the datatype.
-#Does this by first geting a list of stations that hold that datatype in that date, then finds the nearest station to our coordinates, then requests data. 
-#For some reason, some times this still throws an error and does not retrieve any data. Not sure why yet, Might be submitting incorrect datatype cause i am tired, or maybe
-#NOAA has some incorrect entries, so might have to code something that raises the exception if it occurs then tries the next closeest station. 
-def get_data(site_coord, start, end, datatype, dataset="GHCND"):
-    stations = pd.DataFrame.from_records(get_noaa("stations", datasetid=dataset, startdate = start, enddate=end, datatypeid=datatype, limit = 1000))
-    station_id = get_stationid(site_coord, stations)
-    data = get_noaa("data", datasetid=dataset, datatypeid=datatype, startdate=start, enddate=end, stationid=station_id)
+stateids = ["FIPS:06", "FIPS:04", "FIPS:32"] #State ID's for California, Arizona, Nevada
+
+def bin_dates(startdate, enddate):
+    '''Bins dates into a list of date ranges no greater than 998 days different'''
+    assert enddate >= startdate, "End date is earllier than start date."
+    rng = (enddate-startdate).days
+    dateranges = []
+    for i in range(rng//364):
+        start = str((startdate + timedelta(days=i*364)).date())
+        stop = str((startdate + timedelta(days=(i+1)*364)).date())
+        dateranges.append((start, stop))
+    dateranges.append((str((startdate + timedelta(days=(rng//364) * 364)).date()), str(enddate.date())))
+    return dateranges
+
+
+def get_data(site, datatype, locations = stateids, dataset="GHCND", df = socc, max_iters = 10):
+    '''Given a site and a datatype, gets the daily datatype reports from closest station in one year intervals. Iterates through to find a station 
+    that does not throw an error.'''
+    results = []
+    data = df.groupby("Site").mean()
+    coord = (data.loc[site, "Latitude"], data.loc[site, "Longitude"])
+    maxdate = df.groupby("Site").max().loc[site, "Date"] + timedelta(days=1)
+    mindate = df.groupby("Site").min().loc[site, "Date"] - timedelta(days=1)
+    dateranges = bin_dates(mindate, maxdate)
+    for daterange in tqdm(dateranges, desc=f"Getting data for {site}"):
+        startdate, enddate = daterange
+        stations = pd.DataFrame.from_records(get_noaa("stations", datasetid=dataset, startdate = startdate, enddate=enddate, datatypeid=datatype, limit = 1000))
+        for i in range(max_iters):
+            station_id = get_stationid(coord, stations)
+            try:
+                data = get_noaa("data", datasetid=dataset, datatypeid=datatype, startdate=startdate, enddate=enddate, units="metric", stationid=station_id, limit = 1000)
+                results.extend(data)
+                break
+            except KeyError:
+                if i != max_iters - 1:
+                    print(f"No {datatype} data found at {station_id}; iteration {i + 1} for date range: {daterange}, trying next nearest station...")
+                    stations = stations[stations["id"] != station_id]
+                    stations.reset_index(inplace=True, drop=True)
+                else: 
+                    print(f"No {datatype} data found in {max_iters} closest stations.")
+                    break
+    return results
+
+def simple_query(index, datatype, df = socc):
+    '''Simple querying for testing purposes. Returns data with index and datatype of df.'''
+    d = str(df.loc[index, "Date"].date())
+    coord = (df.loc[index, "Latitude"], df.loc[index, "Longitude"])
+    stations = pd.DataFrame.from_records(get_noaa("stations", datasetid="GHCND", startdate = d, enddate=d, datatypeid=datatype, limit = 1000))
+    station_id = get_stationid(coord, stations)
+    data = get_noaa("data", datasetid="GHCND", datatypeid=datatype, startdate=d, enddate=d, stationid=station_id)
     return data
+
+
 # %%
-def query_datatype(index, datatype, dataset="GHCND", data = socc):
-    coord = (data.loc[index, "Latitude"], data.loc[index, "Longitude"])
-    date = str(data.loc[index,"Date"].date())
-    return get_data(coord, date, date, datatype, dataset=dataset)
+def parse_noaa_query(noaa_query, site, datatype):
+    '''Parses the results from NOAA query and returns a dataframe with columns Site, date, {datatype}
+    and a list of stations used. '''
+    df = pd.DataFrame.from_records(noaa_query)
+    assert datatype in df["datatype"].unique(), "Wrong datatype for this NOAA query"
+    df["Date"] = df["date"].apply(lambda x: datetime.strptime(x.split("T")[0], "%Y-%m-%d"))
+    df[datatype] = df["value"]
+    stations = list(df["station"].unique())
+    df["Site"] = site
+    df.drop(columns=["station", "datatype", "value", "attributes", "date"], axis =1, inplace=True)
+    return df, stations
+
+def get_datatype_sitesloop(datatype, data = socc, max_iters = 10):
+    '''Given a datatype, gets the data for all sites and returns single concatenated dataframe. Also returns the meta data as a dictionary of dictionaries; site:datatype:stations'''
+    result = pd.DataFrame()
+    meta = {}
+    for site in tqdm(data["Site"].unique(), desc=f"Getting data for {datatype}"):
+        noaa_query = get_data(site, datatype, df = socc, max_iters = max_iters)
+        df, stations = parse_noaa_query(noaa_query, site, datatype)
+        result.append(df, ignore_index=True)
+        meta[site] = {datatype: stations}
+    return df, meta
+
+def get_all_datatypes(datatypes, data = socc, max_iters = 10):
+    '''Given a list of datatypes, iteratively gets all site data for each data type and merges to a copy of the original dataframe, saving to pickle after each datatype.'''
+    metadata = {}
+    result = data.copy()
+    for datatype in tqdm(datatypes, desc=f"Total Progress for {datatypes}"):
+        df, meta = get_datatype_sitesloop(datatype, data=data, max_iters=max_iters)
+        result.merge(df, how="left", on=["Site", "Date"])
+        for site, data_dict in meta.items():
+            if site not in metadata.keys():
+                metadata[site] = data_dict
+            else: 
+                metadata[site].update(data_dict)
+        with open("code/data/interim_data/socc_noaa.pkl", "wb") as outfile:
+            pickle.dump(result, outfile)
+        with open("code/data/interim_data/socc_metadata.pkl", "wb") as outfile:
+            pickle.dump(metadata, outfile)
+        print(f"{datatype} saved.")
+
 # %%
-'''1) Func to remove stations from get_data and reiterate to nearest station when error is thrown, add max-iters'''
+#Tests
+start = time.time()
+sites = socc["Site"].unique()
+GHCND_types = ["AWND", "DAPR", "MDPR", "PRCP", "SNOW", "TAVG", "TMAX", "TMIN", "WSFG", "WDFG", "WT01", "WT04", "WT08"]
+get_all_datatypes(GHCND_types[0:4])
+print(f"This took {round(time.time() - start, 2)} seconds!")
+
+#%%
+
+

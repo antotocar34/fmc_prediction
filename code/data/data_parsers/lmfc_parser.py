@@ -94,12 +94,23 @@ zips[no_codes[1]] = "92028"
 data["Latitude"] = data["Site"].map(lats)
 data["Longitude"] = data["Site"].map(longs)
 data["Zip"] = data["Site"].map(zips)
-# %%
-
+#%%
+#Eliminate dead fuels
+data = data[~data["Fuel"].isin(["1-Hour", "10-Hour", "1000-Hour"])]
 # Export clean data
 with open("code/data/clean_data/wfas/SOCC_cleaned.pkl", "wb") as outfile:
     pickle.dump(data, outfile)
+# %%
+#Export clean data without winter months
+df = data.copy()
+df["Month"] = df["Date"].apply(lambda x: x.month)
+df = df[df["Month"] > 3].drop(columns="Month")
+with open("code/data/clean_data/wfas/SOCC_cleaned_apr_dec.pkl", "wb") as outfile:
+    pickle.dump(df, outfile)
 
+#%%
+dates = data[["Site", "Date"]].groupby("Site").min()
+dates.sort_values(by="Date").plot()
 
 # ---------------BASIC DATA EXPLORATION BELOW---------------
 
@@ -121,3 +132,5 @@ with open("code/data/clean_data/wfas/SOCC_cleaned.pkl", "wb") as outfile:
 # #%%
 # #Need a smart way to title these plots for data exploration
 # data.groupby(["Site", "Fuel"]).plot(x = "Date", y = "Percent", kind="line", subplots=True)
+
+# %%
