@@ -59,7 +59,7 @@ def parse_sites(df, geocoder, location=None, colname="Site"):
         else:
             latitudes[site] = code.latitude
             longitudes[site] = code.longitude
-            zipcodes[site] = code[0].split(", ")[-2]
+            zipcodes[site] = code[0].split(", ")[-2].split("-")[0]
     return latitudes, longitudes, zipcodes, no_codes
 
 
