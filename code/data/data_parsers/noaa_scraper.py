@@ -120,7 +120,7 @@ def get_data(site, datatype, df, dataset="GHCND", max_iters = 10):
                     stations = stations[stations["id"] != station_id]
                     stations.reset_index(inplace=True, drop=True)
                 else: 
-                    print(f"No {datatype} data found in {max_iters} closest stations.")
+                    print(f"No {datatype} data found in {max_iters} closest stations for {site} in {daterange}.")
                     break
     return results
 
@@ -148,6 +148,9 @@ def get_datatype_sitesloop(datatype, data, result = pd.DataFrame(), meta = {}, m
     #Loop through sites and getting data to append
     for site in tqdm(sites, desc=f"Getting data for {datatype}"): 
         noaa_query = get_data(site, datatype, df = data, max_iters = max_iters)
+        if noaa_query == []:
+            result = result.append({"Site":site}, ignore_index=True)
+            continue
         df, stations = parse_noaa_query(noaa_query, site, datatype)
         result = result.append(df, ignore_index=True)
         result.drop_duplicates(inplace=True, ignore_index=True)
@@ -225,9 +228,9 @@ try:
         saved_data = pickle.load(infile)
     with open("code/data/interim_data/socc_metadata.pkl", "rb") as infile:
         saved_metadata = pickle.load(infile)
-    datatypes = [datatype for datatype in GHCND_types if datatype not in saved_data.columns()]
-    assert not datatypes, "No more datatypes to scrape! Yay!"
-    get_all_datatypes(datatypes=datatypes, data=saved_data, metadata=saved_metadata)
+    datatypes = [datatype for datatype in GHCND_types if datatype not in saved_data.columns]
+    assert len(datatypes) > 0, "No more datatypes to scrape! Yay!"
+    get_all_datatypes(datatypes=datatypes, data=saved_data, metadata=saved_metadata, max_iters=30)
 except OSError:
     with open("code/data/clean_data/wfas/SOCC_cleaned.pkl", "rb") as infile:
         socc = pickle.load(infile) 
