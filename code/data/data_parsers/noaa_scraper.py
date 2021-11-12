@@ -24,7 +24,7 @@ parameters = {
     "locations": ["datasetid", "datacategoryid", "locationcategoryid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
     "stations" : ["datasetid", "datacategoryid", "locationcategoryid", "datatypeid", "startdate", "enddate", "extent", "sortfield", "sortorder", "limit", "offset"],
     "data" : ["datasetid", "locationid", "stationid", "datatypeid", "startdate", "enddate", "units", "sortfield", "sortorder", "limit", "offset", "includemetadata"]
-}
+}                                                        
 # %%
 #Parse and Scrape Functions
 
@@ -61,7 +61,7 @@ def get_noaa(data:str, url = noaa_api, token = token, results = True, override =
 #Sample usage: Shows location data via state. California is FIPS:06, Arizona is FIPS:04, nevada is FIPS:32
 #get_noaa("locations", locationcategoryid="ST", limit = 1000)
 
-def simple_query(index, datatype, df = socc):
+def simple_query(index, datatype, df):
     '''Simple querying for testing purposes. Returns data with index and datatype of df.'''
     d = str(df.loc[index, "Date"].date())
     coord = (df.loc[index, "Latitude"], df.loc[index, "Longitude"])
@@ -88,7 +88,7 @@ def bin_dates(startdate, enddate):
     dateranges.append((str((startdate + timedelta(days=(rng//364) * 364)).date()), str(enddate.date())))
     return dateranges
 
-def get_data(site, datatype, df = socc, dataset="GHCND", max_iters = 10):
+def get_data(site, datatype, df, dataset="GHCND", max_iters = 10):
     '''Given a site and a datatype, gets the daily datatype reports from closest station in one year intervals. Iterates through to find a station 
     that does not throw an error.'''
     results = []
@@ -128,27 +128,42 @@ def parse_noaa_query(noaa_query, site, datatype):
     df.drop(columns=["station", "datatype", "value", "attributes", "date"], axis =1, inplace=True)
     return df, stations
 
-def get_datatype_sitesloop(datatype, data = socc, max_iters = 10):
+def get_datatype_sitesloop(datatype, data, result = pd.DataFrame(), meta = {}, max_iters = 10):
     '''Given a datatype, gets the data for all sites and returns single concatenated dataframe. Also returns the meta data as a dictionary of dictionaries; site:datatype:stations'''
-    result = pd.DataFrame()
-    meta = {}
-    for site in tqdm(data["Site"].unique(), desc=f"Getting data for {datatype}"):
-        noaa_query = get_data(site, datatype, df = socc, max_iters = max_iters)
+    if not result.empty:  # Get the sites that were already done and omit those
+        sites = [site for site in data["Site"].unique() if site not in result["Site"].unique()]
+    else:
+        sites = [site for site in data["Site"].unique()]
+    for site in tqdm(sites, desc=f"Getting data for {datatype}"): #Loop through sites and getting data to append
+        noaa_query = get_data(site, datatype, df = data, max_iters = max_iters)
         df, stations = parse_noaa_query(noaa_query, site, datatype)
-        result.append(df, ignore_index=True)
+        result = result.append(df, ignore_index=True)
         result.drop_duplicates(inplace=True, ignore_index=True)
         meta[site] = {datatype: stations}
+        with open(f"code/data/interim_data/socc_noaa_{datatype}.pkl", "wb") as outfile: #Save Progress here
+            pickle.dump(result, outfile)
+        with open(f"code/data/interim_data/socc_metadata_{datatype}.pkl", "wb") as outfile:
+            pickle.dump(meta, outfile)
+        print(f"{datatype} data for {site} saved in intermediate DF.")
     return result, meta
 
-def get_all_datatypes(datatypes, data = socc, max_iters = 10):
+def get_all_datatypes(datatypes, data, metadata = {}, max_iters = 10):
     '''Given a list of datatypes, iteratively gets all site data for each data type and merges to a copy of the original dataframe, saving to pickle after each datatype.'''
-    metadata = {}
     result = data.copy()
     for datatype in tqdm(datatypes, desc=f"Total Progress for {datatypes}"):
-        df, meta = get_datatype_sitesloop(datatype, data=data, max_iters=max_iters)
+        try: #Try loading saved data if it exists. If not, continue with blank slate. 
+            with open(f"code/data/interim_data/socc_noaa_{datatype}.pkl", "rb") as infile:
+                saved_df = pickle.load(infile)
+            with open(f"code/data/interim_data/socc_metadata_{datatype}.pkl", "rb") as infile:
+                saved_meta = pickle.load(infile)
+        except OSError:
+            saved_df = pd.DataFrame()
+            saved_meta = {}
 
-        result.merge(df, how="left", on=["Site", "Date"])
-        for site, data_dict in meta.items():
+        df, meta = get_datatype_sitesloop(datatype, result=saved_df, meta=saved_meta, data=data, max_iters=max_iters)
+        result = result.merge(df, how="left", on=["Site", "Date"]) #Get data and merge
+        
+        for site, data_dict in meta.items(): #Append metadata and save, 
             if site not in metadata.keys():
                 metadata[site] = data_dict
             else: 
@@ -168,27 +183,30 @@ def get_available_types(noaa_dataset, maxdate, mindate, locationid):
     all_types = all_types[all_types["mindate"] <= mindate][all_types["maxdate"] >= maxdate]
     return all_types
 
-#GHCND_types = get_available_types("GHCND", maxdate = max(socc["Date"]), mindate=min(socc["Date"]), locationid="FIPS:06")
-# GSOM_types = get_available_types("GSOM", maxdate = max(socc["Date"]) - timedelta(days=62), mindate=min(socc["Date"]), locationid="FIPS:06")
-
-'''Data types of interest:
-GHCND: AWND, DAPR, MDPR, PRCP, SNOW, TAVG, TMAX, TMIN, WSFG, WDFG, WT01, WT04, WT08
-GSOM: TAVG, TMAX, TMIN, TSUN, CLDD, DP01, DP10, DT00, DT32, DX32, DX70, DX90, , EVAP, 
-MN01, MN02, MN03, MX01, MX02, MX03, PRCP'''
-#%%
-#Use a partial wrapper to amend defaults up there for data.
+#GHCND_types_df = get_available_types("GHCND", maxdate = max(socc["Date"]), mindate=min(socc["Date"]), locationid="FIPS:06")
+#GSOM_types_df = get_available_types("GSOM", maxdate = max(socc["Date"]) - timedelta(days=62), mindate=min(socc["Date"]), locationid="FIPS:06")
 
 #%%
 #Load data
 stateids = ["FIPS:06", "FIPS:04", "FIPS:32"] #State ID's for California, Arizona, Nevada
-with open("code/data/clean_data/wfas/SOCC_cleaned.pkl", "rb") as infile:
-    socc = pickle.load(infile)
+
 # %%
 #Run Scraper
 start = time.time()
-sites = socc["Site"].unique()
 GHCND_types = ["AWND", "DAPR", "MDPR", "PRCP", "SNOW", "TAVG", "TMAX", "TMIN", "WSFG", "WDFG", "WT01", "WT04", "WT08"]
-get_all_datatypes(GHCND_types[0:4])
+GSOM_types = ["TAVG", "TMAX", "TMIN", "TSUN", "CLDD", "DP01", "DT00", "DT32", "DX32", "DX70", "DX90", "EVAP", "MN01",
+"MN02", "MN03", "MX01", "MX02", "MX03", "PRCP"]
+try:
+    with open("code/data/interim_data/socc_noaa.pkl", "rb") as infile:
+        saved_data = pickle.load(infile)
+    with open("code/data/interim_data/socc_metadata.pkl", "rb") as infile:
+        saved_metadata = pickle.load(infile)
+    datatypes = [datatype for datatype in GHCND_types if datatype not in saved_data.columns()]
+    get_all_datatypes(datatypes=datatypes, data=saved_data, metadata=saved_metadata)
+except OSError:
+    with open("code/data/clean_data/wfas/SOCC_cleaned.pkl", "rb") as infile:
+        socc = pickle.load(infile) 
+        get_all_datatypes(datatypes=GHCND_types, data=socc)
 print(f"This took {round(time.time() - start, 2)} seconds!")
 
 #%%
