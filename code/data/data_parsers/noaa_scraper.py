@@ -189,7 +189,11 @@ def get_all_datatypes(datatypes, data, metadata = {}, max_iters = 10):
                 metadata[site].update(data_dict)
         with open("code/data/interim_data/socc_noaa.pkl", "wb") as outfile:
             pickle.dump(result, outfile)
+        with open("code/data/interim_data/socc_noaa_backup.pkl", "wb") as outfile:
+            pickle.dump(data, outfile)
         with open("code/data/interim_data/socc_metadata.pkl", "wb") as outfile:
+            pickle.dump(metadata, outfile)
+        with open("code/data/interim_data/socc_metadata_backup.pkl", "wb") as outfile:
             pickle.dump(metadata, outfile)
         print(f"{datatype} saved.")
 # %%
