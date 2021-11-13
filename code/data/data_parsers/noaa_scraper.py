@@ -5,6 +5,8 @@ from tqdm import tqdm
 import pandas as pd
 from geopy.distance import distance as geodist
 from functools import partial
+from urllib3.exceptions import MaxRetryError, NewConnectionError
+from requests.exceptions import ConnectionError
 from datetime import datetime, date, timedelta
 import time
 
@@ -61,6 +63,9 @@ def get_noaa(data:str, url = noaa_api, token = token, override = False, paramete
     endpoint = f"{data}?{'&'.join(optional_params)}"
     headers = {"token" : token}
     r = requests.get(url=url + endpoint, headers = headers)
+    if r.content == 429:
+        print("Reached maximum requests for the day. Start again next day!")
+        exit()
     time.sleep(0.25)
     return r
 
@@ -76,6 +81,15 @@ def simple_query(index, datatype, df):
     station_id = get_stationid(coord, stations)
     data = get_noaa("data", datasetid="GHCND", datatypeid=datatype, startdate=d, enddate=d, stationid=station_id)
     return data.json()
+
+def get_available_types(noaa_dataset, maxdate, mindate, locationid):
+    '''Get all available datatypes for given noaa dataset and date range.'''
+    all_types = get_noaa("datatypes", datasetid=noaa_dataset, locationid=locationid, limit=1000)
+    all_types = pd.DataFrame.from_records(all_types.json()["results"])
+    all_types["mindate"] = pd.to_datetime(all_types["mindate"], infer_datetime_format=True)
+    all_types["maxdate"] = pd.to_datetime(all_types["maxdate"], infer_datetime_format=True)
+    all_types = all_types[all_types["mindate"] <= mindate][all_types["maxdate"] >= maxdate]
+    return all_types
 
 def get_stationid(site_coord, station_df):
     '''Given site_coord as a (lat, long) tuple and a station df outputted by NOAA API, 
@@ -94,6 +108,20 @@ def bin_dates(startdate, enddate):
         dateranges.append((start, stop))
     dateranges.append((str((startdate + timedelta(days=(rng//364) * 364)).date()), str(enddate.date())))
     return dateranges
+
+def parse_noaa_query(noaa_query, site, datatype):
+    '''Parses the results from NOAA query and returns a dataframe with columns Site, date, {datatype}
+    and a list of stations used. '''
+    df = pd.DataFrame.from_records(noaa_query)
+    assert datatype in df["datatype"].unique(), "Wrong datatype for this NOAA query"
+
+    df["Date"] = df["date"].apply(lambda x: datetime.strptime(x.split("T")[0], "%Y-%m-%d"))
+    df[datatype] = df["value"]
+    stations = list(df["station"].unique())
+    df["Site"] = site
+    df.drop(columns=["station", "datatype", "value", "attributes", "date"], axis =1, inplace=True)
+    return df, stations
+
 
 def get_data(site, datatype, df, dataset="GHCND", max_iters = 10):
     '''Given a site and a datatype, gets the daily datatype reports from closest station in one year intervals. Iterates through to find a station 
@@ -124,25 +152,7 @@ def get_data(site, datatype, df, dataset="GHCND", max_iters = 10):
                 else: 
                     tqdm.write(f"{data}: {data.content}...No {datatype} data found in {max_iters} closest stations for {site} in {daterange}.")
                     break
-            except JSONDecodeError:
-                print(f"JSON DECODE ERROR: {data}")
-                print("Restarting...")
-                time.sleep(10)
-                os.execl(sys.executable, "python3", __file__)
     return results
-
-def parse_noaa_query(noaa_query, site, datatype):
-    '''Parses the results from NOAA query and returns a dataframe with columns Site, date, {datatype}
-    and a list of stations used. '''
-    df = pd.DataFrame.from_records(noaa_query)
-    assert datatype in df["datatype"].unique(), "Wrong datatype for this NOAA query"
-
-    df["Date"] = df["date"].apply(lambda x: datetime.strptime(x.split("T")[0], "%Y-%m-%d"))
-    df[datatype] = df["value"]
-    stations = list(df["station"].unique())
-    df["Site"] = site
-    df.drop(columns=["station", "datatype", "value", "attributes", "date"], axis =1, inplace=True)
-    return df, stations
 
 def get_datatype_sitesloop(datatype, data, result = pd.DataFrame(), meta = {}, max_iters = 10):
     '''Given a datatype, gets the data for all sites and returns single concatenated dataframe. Also returns the meta data as a dictionary of dictionaries; site:datatype:stations'''
@@ -188,9 +198,15 @@ def get_all_datatypes(datatypes, data, metadata = {}, max_iters = 10):
 
         #Get data and merge
         result = data.copy()
-        df, meta = get_datatype_sitesloop(datatype, result=saved_df, meta=saved_meta, data=data, max_iters=max_iters)
+        try:
+            df, meta = get_datatype_sitesloop(datatype, result=saved_df, meta=saved_meta, data=data, max_iters=max_iters)
+        except JSONDecodeError:
+            print(f"JSON DECODE ERROR: {data}")
+            print("Restarting...")
+            time.sleep(10)
+            os.execl(sys.executable, "python3", __file__)
         result = result.merge(df, how="left", on=["Site", "Date"])
-    
+
         #Append metadata and save, 
         for site, data_dict in meta.items(): 
             if site not in metadata.keys():
@@ -208,27 +224,20 @@ def get_all_datatypes(datatypes, data, metadata = {}, max_iters = 10):
         print(f"{datatype} saved.")
 # %%
 #List available datatypes for a given datarange for a given dataset.
-def get_available_types(noaa_dataset, maxdate, mindate, locationid):
-    '''Get all available datatypes for given noaa dataset and date range.'''
-    all_types = get_noaa("datatypes", datasetid=noaa_dataset, locationid=locationid, limit=1000)
-    all_types = pd.DataFrame.from_records(all_types.json()["results"])
-    all_types["mindate"] = pd.to_datetime(all_types["mindate"], infer_datetime_format=True)
-    all_types["maxdate"] = pd.to_datetime(all_types["maxdate"], infer_datetime_format=True)
-    all_types = all_types[all_types["mindate"] <= mindate][all_types["maxdate"] >= maxdate]
-    return all_types
 
 #GHCND_types_df = get_available_types("GHCND", maxdate = max(socc["Date"]), mindate=min(socc["Date"]), locationid="FIPS:06")
 #GSOM_types_df = get_available_types("GSOM", maxdate = max(socc["Date"]) - timedelta(days=62), mindate=min(socc["Date"]), locationid="FIPS:06")
 
-# %%
 #Run Scraper
-start = time.time()
 
 #Interested Datatypes
 stateids = ["FIPS:06", "FIPS:04", "FIPS:32"] #State ID's for California, Arizona, Nevada
-GHCND_types = ["AWND", "DAPR", "MDPR", "PRCP", "SNOW", "TAVG", "TMAX", "TMIN", "WSFG", "WDFG", "WT01", "WT04", "WT08"]
-GSOM_types = ["TAVG", "TMAX", "TMIN", "TSUN", "CLDD", "DP01", "DT00", "DT32", "DX32", "DX70", "DX90", "EVAP", "MN01",
-"MN02", "MN03", "MX01", "MX02", "MX03", "PRCP"]
+GHCND_types_done = ["AWND"]
+GHCND_types = ["MDPR", "PRCP", "TAVG", "TMAX", "TMIN", "WSFG", "WDFG", "WT01", "WT04", "WT08", "DAPR", "SNOW"]
+GSOM_types = ["TAVG", "TMAX", "TMIN", "EVAP", "TSUN", "MN01", "MX01", "CLDD", "PRCP", "DP01", "DT00", "DT32", "DX32", "DX70", "DX90",
+"MN02", "MN03", "MX02", "MX03"]
+#For GSOM just need to change to 10 year data range; pass dataset argument through. Add merge functionality to match months. 
+
 
 #Open last saved file if it exists. If not start anew.
 try:
@@ -239,12 +248,16 @@ try:
     datatypes = [datatype for datatype in GHCND_types if datatype not in saved_data.columns]
     assert len(datatypes) > 0, "No more datatypes to scrape! Yay!"
     get_all_datatypes(datatypes=datatypes, data=saved_data, metadata=saved_metadata, max_iters=30)
-except OSError:
+except FileNotFoundError:
     with open("code/data/clean_data/wfas/SOCC_cleaned.pkl", "rb") as infile:
         socc = pickle.load(infile) 
         get_all_datatypes(datatypes=GHCND_types, data=socc)
-
-print(f"This took {round(time.time() - start, 2)} seconds!")
+except NewConnectionError or ConnectionError or MaxRetryError or OSError:
+    print("CONNECTION ERROR")
+    print("Waiting 10 seconds before restarting")
+    time.sleep(10)
+    print("Restarting...")
+    os.execl(sys.executable, "python3", __file__)
 
 #%%
 
