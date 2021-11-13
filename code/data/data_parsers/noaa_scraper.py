@@ -1,5 +1,6 @@
 #%%
-import requests, pickle, os
+from json.decoder import JSONDecodeError
+import requests, pickle, os, sys
 from tqdm import tqdm
 import pandas as pd
 from geopy.distance import distance as geodist
@@ -34,7 +35,7 @@ parameters = {
 # %%
 #Parse and Scrape Functions
 
-def get_noaa(data:str, url = noaa_api, token = token, results = True, override = False, parameters = parameters, **options):
+def get_noaa(data:str, url = noaa_api, token = token, override = False, parameters = parameters, **options):
     '''Sets an endpoint to be passed to noaa api.
 
     Arguments:
@@ -42,7 +43,8 @@ def get_noaa(data:str, url = noaa_api, token = token, results = True, override =
     data: "datasets", "locations", "locationcategories", or "stations".
     provide optional parameters in either list or string format. 
     dates must be in yyyy-mm-dd format. 
-    see https://www.ncdc.noaa.gov/cdo-web/webservices/v2#gettingStarted for more info on endpoint options.'''
+    see https://www.ncdc.noaa.gov/cdo-web/webservices/v2#gettingStarted for more info on endpoint options.
+    Override allows you to set data as something else such as "locations/ST"'''
     if data not in parameters.keys() and override == False:
         print(f"Unsupported type given. Supported types are: {', '.join(list(parameters.keys()))}")
         return
@@ -60,10 +62,8 @@ def get_noaa(data:str, url = noaa_api, token = token, results = True, override =
     headers = {"token" : token}
     r = requests.get(url=url + endpoint, headers = headers)
     time.sleep(0.25)
-    if results == True:
-        return r.json()["results"]
-    else:
-        return r.json()
+    return r
+
 #Sample usage: Shows location data via state. California is FIPS:06, Arizona is FIPS:04, nevada is FIPS:32
 #get_noaa("locations", locationcategoryid="ST", limit = 1000)
 
@@ -71,10 +71,11 @@ def simple_query(index, datatype, df):
     '''Simple querying for testing purposes. Returns data with index and datatype of df.'''
     d = str(df.loc[index, "Date"].date())
     coord = (df.loc[index, "Latitude"], df.loc[index, "Longitude"])
-    stations = pd.DataFrame.from_records(get_noaa("stations", datasetid="GHCND", startdate = d, enddate=d, datatypeid=datatype, limit = 1000))
+    stations = get_noaa("stations", datasetid="GHCND", startdate = d, enddate=d, datatypeid=datatype, limit = 1000)
+    stations = pd.DataFrame.from_records(stations.json()["results"])
     station_id = get_stationid(coord, stations)
     data = get_noaa("data", datasetid="GHCND", datatypeid=datatype, startdate=d, enddate=d, stationid=station_id)
-    return data
+    return data.json()
 
 def get_stationid(site_coord, station_df):
     '''Given site_coord as a (lat, long) tuple and a station df outputted by NOAA API, 
@@ -105,23 +106,29 @@ def get_data(site, datatype, df, dataset="GHCND", max_iters = 10):
     mindate = df.groupby("Site").min().loc[site, "Date"] - timedelta(days=1)
     dateranges = bin_dates(mindate, maxdate)
 
-    for daterange in tqdm(dateranges, desc=f"Getting {datatype} for {site}"):
+    for daterange in tqdm(dateranges, desc=f"Getting {datatype} for {site}", colour="green"):
         startdate, enddate = daterange
-        stations = pd.DataFrame.from_records(get_noaa("stations", datasetid=dataset, startdate = startdate, enddate=enddate, datatypeid=datatype, limit = 1000))
+        stations = get_noaa("stations", datasetid=dataset, startdate = startdate, enddate=enddate, datatypeid=datatype, limit = 1000)
+        stations = pd.DataFrame.from_records(stations.json()["results"])
         for i in range(max_iters):
             station_id = get_stationid(coord, stations)
             try:
                 data = get_noaa("data", datasetid=dataset, datatypeid=datatype, startdate=startdate, enddate=enddate, units="metric", stationid=station_id, limit = 1000)
-                results.extend(data)
+                results.extend(data.json()["results"])
                 break
             except KeyError:
                 if i != max_iters - 1:
-                    print(f"No {datatype} data found at {station_id}; iteration {i + 1} for date range: {daterange}, trying next nearest station...")
+                    tqdm.write(f"{data}: {data.content}...No {datatype} data found at {station_id}; iteration {i + 1} for date range: {daterange}, trying next nearest station...")
                     stations = stations[stations["id"] != station_id]
                     stations.reset_index(inplace=True, drop=True)
                 else: 
-                    print(f"No {datatype} data found in {max_iters} closest stations for {site} in {daterange}.")
+                    tqdm.write(f"{data}: {data.content}...No {datatype} data found in {max_iters} closest stations for {site} in {daterange}.")
                     break
+            except JSONDecodeError:
+                print(f"JSON DECODE ERROR: {data}")
+                print("Restarting...")
+                time.sleep(10)
+                os.execl(sys.executable, "python3", __file__)
     return results
 
 def parse_noaa_query(noaa_query, site, datatype):
@@ -146,7 +153,7 @@ def get_datatype_sitesloop(datatype, data, result = pd.DataFrame(), meta = {}, m
         sites = [site for site in data["Site"].unique()]
 
     #Loop through sites and getting data to append
-    for site in tqdm(sites, desc=f"Getting data for {datatype}"): 
+    for site in tqdm(sites, desc=f"Getting data for {datatype}", colour="blue"): 
         noaa_query = get_data(site, datatype, df = data, max_iters = max_iters)
         if noaa_query == []:
             result = result.append({"Site":site}, ignore_index=True)
@@ -161,7 +168,7 @@ def get_datatype_sitesloop(datatype, data, result = pd.DataFrame(), meta = {}, m
             pickle.dump(result, outfile)
         with open(f"code/data/interim_data/socc_metadata_{datatype}.pkl", "wb") as outfile:
             pickle.dump(meta, outfile)
-        print(f"{datatype} data for {site} saved in intermediate DF.")
+        tqdm.write(f"{datatype} data for {site} saved in intermediate DF.")
     return result, meta
 
 def get_all_datatypes(datatypes, data, metadata = {}, max_iters = 10):
@@ -183,7 +190,7 @@ def get_all_datatypes(datatypes, data, metadata = {}, max_iters = 10):
         result = data.copy()
         df, meta = get_datatype_sitesloop(datatype, result=saved_df, meta=saved_meta, data=data, max_iters=max_iters)
         result = result.merge(df, how="left", on=["Site", "Date"])
-        
+    
         #Append metadata and save, 
         for site, data_dict in meta.items(): 
             if site not in metadata.keys():
@@ -203,7 +210,8 @@ def get_all_datatypes(datatypes, data, metadata = {}, max_iters = 10):
 #List available datatypes for a given datarange for a given dataset.
 def get_available_types(noaa_dataset, maxdate, mindate, locationid):
     '''Get all available datatypes for given noaa dataset and date range.'''
-    all_types = pd.DataFrame.from_records(get_noaa("datatypes", datasetid=noaa_dataset, locationid=locationid, limit=1000))
+    all_types = get_noaa("datatypes", datasetid=noaa_dataset, locationid=locationid, limit=1000)
+    all_types = pd.DataFrame.from_records(all_types.json()["results"])
     all_types["mindate"] = pd.to_datetime(all_types["mindate"], infer_datetime_format=True)
     all_types["maxdate"] = pd.to_datetime(all_types["maxdate"], infer_datetime_format=True)
     all_types = all_types[all_types["mindate"] <= mindate][all_types["maxdate"] >= maxdate]
