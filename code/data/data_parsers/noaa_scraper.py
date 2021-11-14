@@ -6,7 +6,7 @@ import pandas as pd
 from geopy.distance import distance as geodist
 from functools import partial
 from urllib3.exceptions import MaxRetryError, NewConnectionError
-from requests.exceptions import ConnectionError
+from socket import error as SocketError
 from datetime import datetime, date, timedelta
 import time
 
@@ -63,7 +63,7 @@ def get_noaa(data:str, url = noaa_api, token = token, override = False, paramete
     endpoint = f"{data}?{'&'.join(optional_params)}"
     headers = {"token" : token}
     r = requests.get(url=url + endpoint, headers = headers)
-    if r.content == 429:
+    if r.status_code == 429:
         print("Reached maximum requests for the day. Start again next day!")
         exit()
     time.sleep(0.25)
@@ -136,8 +136,12 @@ def get_data(site, datatype, df, dataset="GHCND", max_iters = 10):
 
     for daterange in tqdm(dateranges, desc=f"Getting {datatype} for {site}", colour="green"):
         startdate, enddate = daterange
-        stations = get_noaa("stations", datasetid=dataset, startdate = startdate, enddate=enddate, datatypeid=datatype, limit = 1000)
-        stations = pd.DataFrame.from_records(stations.json()["results"])
+        try:
+            stations = get_noaa("stations", datasetid=dataset, startdate = startdate, enddate=enddate, datatypeid=datatype, limit = 1000)
+            stations = pd.DataFrame.from_records(stations.json()["results"])
+        except KeyError:
+            print("Error getting stations. Restarting...")
+            os.execl(sys.executable, "python3", __file__)
         for i in range(max_iters):
             station_id = get_stationid(coord, stations)
             try:
@@ -252,7 +256,7 @@ except FileNotFoundError:
     with open("code/data/clean_data/wfas/SOCC_cleaned.pkl", "rb") as infile:
         socc = pickle.load(infile) 
         get_all_datatypes(datatypes=GHCND_types, data=socc)
-except NewConnectionError or ConnectionError or MaxRetryError or OSError:
+except NewConnectionError or SocketError or MaxRetryError or OSError:
     print("CONNECTION ERROR")
     print("Waiting 10 seconds before restarting")
     time.sleep(10)
