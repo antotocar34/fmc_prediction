@@ -59,12 +59,13 @@ def get_noaa(data:str, url = noaa_api, token = token, override = False, paramete
             for each in option:
                 optional_params.append(f"{key}={each}")
         else:
+
             optional_params.append(f"{key}={option}")   
     endpoint = f"{data}?{'&'.join(optional_params)}"
     headers = {"token" : token}
     r = requests.get(url=url + endpoint, headers = headers)
     if r.status_code == 429:
-        print("Reached maximum requests for the day. Start again next day!")
+        tqdm.write("Reached maximum requests for the day. Start again next day!")
         exit()
     time.sleep(0.25)
     return r
@@ -142,9 +143,13 @@ def get_data(site, datatype, df, dataset="GHCND", max_iters = 10):
         except KeyError:
             print("Error getting stations. Restarting...")
             os.execl(sys.executable, "python3", __file__)
+        except ValueError:
+            if stations.empty:
+                tqdm.write(f"No stations with {datatype} for {site} in {daterange}")
+            break
         for i in range(max_iters):
-            station_id = get_stationid(coord, stations)
             try:
+                station_id = get_stationid(coord, stations)
                 data = get_noaa("data", datasetid=dataset, datatypeid=datatype, startdate=startdate, enddate=enddate, units="metric", stationid=station_id, limit = 1000)
                 results.extend(data.json()["results"])
                 break
@@ -156,6 +161,9 @@ def get_data(site, datatype, df, dataset="GHCND", max_iters = 10):
                 else: 
                     tqdm.write(f"{data}: {data.content}...No {datatype} data found in {max_iters} closest stations for {site} in {daterange}.")
                     break
+            except ValueError:
+                tqdm.write(f"{data}: {data.content}...No {datatype} data found in any stations for {site} in {daterange}.")
+                break
     return results
 
 def get_datatype_sitesloop(datatype, data, result = pd.DataFrame(), meta = {}, max_iters = 10):
@@ -205,8 +213,8 @@ def get_all_datatypes(datatypes, data, metadata = {}, max_iters = 10):
         try:
             df, meta = get_datatype_sitesloop(datatype, result=saved_df, meta=saved_meta, data=data, max_iters=max_iters)
         except JSONDecodeError:
-            print(f"JSON DECODE ERROR: {data}")
-            print("Restarting...")
+            tqdm.write(f"JSON DECODE ERROR: {data}")
+            tqdm.write("Restarting...")
             time.sleep(10)
             os.execl(sys.executable, "python3", __file__)
         result = result.merge(df, how="left", on=["Site", "Date"])
