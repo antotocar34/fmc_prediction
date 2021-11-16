@@ -274,3 +274,6 @@ except NewConnectionError or SocketError or MaxRetryError or OSError:
 #%%
 
 
+'''Next steps:
+1) Function to get cleaned NOAA weather and/or rainfail datasets based on date and stationID
+2) Apply this function to SOCC cleaned data to form a DF of weather data that can be matched to WFAS DF'''

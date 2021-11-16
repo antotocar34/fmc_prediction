@@ -26,10 +26,10 @@ useful_ids = [3073, 3074, 3, 810, 3108, 3109, 3110, 3111, 3112, 3113, 3114, \
 potential_traits = traits[traits["TraitID"].isin(potential_ids)]
 useful_traits = traits[traits["TraitID"].isin(useful_ids)]
 # %%
+
 '''Next Steps:
 1) Shortlist plant traits
 2) Create Plant id list
     a) Create a common name to scientific(taxonomical) name mapping and save it for merging DF's later
 3) Re-request plant traits db from TRY
 4) Clean data'''
-

@@ -1,6 +1,7 @@
 # For Antoine's virtualenv setup
 pyproject.toml
 poetry.lock
+.envrc
 
 # Unused python files
 __pychache__
