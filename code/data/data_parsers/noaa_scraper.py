@@ -144,8 +144,7 @@ def get_data(site, datatype, df, dataset="GHCND", max_iters = 10):
             print("Error getting stations. Restarting...")
             os.execl(sys.executable, "python3", __file__)
         except ValueError:
-            if stations.empty:
-                tqdm.write(f"No stations with {datatype} for {site} in {daterange}")
+            tqdm.write(f"No stations with {datatype} for {site} in {daterange}")
             break
         for i in range(max_iters):
             try:
