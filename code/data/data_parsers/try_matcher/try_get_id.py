@@ -16,3 +16,6 @@ plant_ids = try_id[try_id["AccSpeciesName"].isin(plant_list)]
 # %%
 print(", ".join([str(id) for id in plant_ids["AccSpeciesID"]]))
 # %%
+traits = pd.read_table("code/data/raw_data/try/plant_traits.txt", encoding="latin-1", sep="\t", usecols=list(range(4,24)))
+traits = traits[traits["TraitID"].notnull()]
+# %%
