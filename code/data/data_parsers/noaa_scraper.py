@@ -23,8 +23,8 @@ Also good to make sure other person is not doing it at the same time, but I am s
 os.chdir(f"{os.path.dirname(os.path.realpath(__file__))}/../../..")
 
 #NOAA API Info
-# token = "JcvRdALGKywGfyxsGdulfWCXhJBhpqFO"
-token = "AKpYgimLAJUNlIcGvznUXauwESRpjdSG"
+token = "JcvRdALGKywGfyxsGdulfWCXhJBhpqFO"
+# token = "AKpYgimLAJUNlIcGvznUXauwESRpjdSG"
 noaa_api = "https://www.ncdc.noaa.gov/cdo-web/api/v2/"
 parameters = {
     "datasets": ["datatypeid", "locationid", "stationid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
@@ -180,8 +180,8 @@ def get_data(site, datatype, df, dataset="GHCND", max_iters = 10):
     coord = (data.loc[site, "Latitude"], data.loc[site, "Longitude"])
     maxdate = df.groupby("Site").max().loc[site, "Date"] + timedelta(days=1)
     mindate = df.groupby("Site").min().loc[site, "Date"] - timedelta(days=1)
-    # dateranges = bin_dates(mindate, maxdate)
-    dateranges = [((mindate - timedelta(days=21)).date(), mindate.date())]
+    dateranges = bin_dates(mindate, maxdate)
+    # dateranges = [((mindate - timedelta(days=21)).date(), mindate.date())]
     for daterange in tqdm(dateranges, desc=f"Getting {datatype} for {site}", colour="green"):
         startdate, enddate = daterange
         try:
@@ -242,9 +242,9 @@ def get_datatype_sitesloop(datatype, data, result = pd.DataFrame(), meta = {}, m
         meta[site] = {datatype: stations}
 
         #Save Progress here
-        with open(f"code/data/interim_data/socc_noaa_{datatype}_extra.pkl", "wb") as outfile: 
+        with open(f"code/data/interim_data/socc_noaa_{datatype}.pkl", "wb") as outfile: 
             pickle.dump(result, outfile)
-        with open(f"code/data/interim_data/socc_metadata_{datatype}_extra.pkl", "wb") as outfile:
+        with open(f"code/data/interim_data/socc_metadata_{datatype}.pkl", "wb") as outfile:
             pickle.dump(meta, outfile)
         tqdm.write(f"{datatype} data for {site} saved in intermediate DF.")
     return result, meta
@@ -263,9 +263,9 @@ def get_all_datatypes(datatypes, data, metadata = {}, max_iters = 10):
     for datatype in tqdm(datatypes, desc=f"Total Progress for {datatypes}"):
         #Try loading saved data if it exists. If not, continue with blank slate. 
         try: 
-            with open(f"code/data/interim_data/socc_noaa_{datatype}_extra.pkl", "rb") as infile:
+            with open(f"code/data/interim_data/socc_noaa_{datatype}.pkl", "rb") as infile:
                 saved_df = pickle.load(infile)
-            with open(f"code/data/interim_data/socc_metadata_{datatype}_extra.pkl", "rb") as infile:
+            with open(f"code/data/interim_data/socc_metadata_{datatype}.pkl", "rb") as infile:
                 saved_meta = pickle.load(infile)
         except OSError:
             saved_df = pd.DataFrame()
@@ -288,13 +288,13 @@ def get_all_datatypes(datatypes, data, metadata = {}, max_iters = 10):
                 metadata[site] = data_dict
             else: 
                 metadata[site].update(data_dict)
-        with open("code/data/interim_data/socc_noaa_extra.pkl", "wb") as outfile:
+        with open("code/data/interim_data/socc_noaa.pkl", "wb") as outfile:
             pickle.dump(result, outfile)
-        with open("code/data/interim_data/socc_noaa_backup_extra.pkl", "wb") as outfile:
+        with open("code/data/interim_data/socc_noaa_backup.pkl", "wb") as outfile:
             pickle.dump(data, outfile)
-        with open("code/data/interim_data/socc_metadata_extra.pkl", "wb") as outfile:
+        with open("code/data/interim_data/socc_metadata.pkl", "wb") as outfile:
             pickle.dump(metadata, outfile)
-        with open("code/data/interim_data/socc_metadata_backup_extra.pkl", "wb") as outfile:
+        with open("code/data/interim_data/socc_metadata_backup.pkl", "wb") as outfile:
             pickle.dump(metadata, outfile)
         print(f"{datatype} saved.")
 # %%
@@ -307,8 +307,8 @@ def get_all_datatypes(datatypes, data, metadata = {}, max_iters = 10):
 
 #Interested Datatypes
 stateids = ["FIPS:06", "FIPS:04", "FIPS:32"] #State ID's for California, Arizona, Nevada
-GHCND_types_dropped = [ "WT01", "WT04", "WT08", "DAPR", "MDPR"]
-GHCND_types = [ "AWND", "PRCP", "TAVG", "TMAX", "TMIN", "WSFG", "WDFG", "SNOW", "SN32", "SN33", "SX31", "SX32", "SX33", "TSUN"]
+GHCND_types_dropped = [ "WT01", "WT04", "WT08", "DAPR", "MDPR", "TSUN"]
+GHCND_types = [ "AWND", "PRCP", "TAVG", "TMAX", "TMIN", "WSFG", "WDFG", "SNOW", "SN32", "SN33", "SX31", "SX32", "SX33"]
 GSOM_types = ["TAVG", "TMAX", "TMIN", "EVAP", "TSUN", "MN01", "MX01", "CLDD", "PRCP", "DP01", "DT00", "DT32", "DX32", "DX70", "DX90",
 "MN02", "MN03", "MX02", "MX03"]
 #For GSOM just need to change to 10 year data range; pass dataset argument through. Add merge functionality to match months. 
@@ -316,9 +316,9 @@ GSOM_types = ["TAVG", "TMAX", "TMIN", "EVAP", "TSUN", "MN01", "MX01", "CLDD", "P
 
 #Open last saved file if it exists. If not start anew.
 try:
-    with open("code/data/interim_data/socc_noaa_extra.pkl", "rb") as infile:
+    with open("code/data/interim_data/socc_noaa.pkl", "rb") as infile:
         saved_data = pickle.load(infile)
-    with open("code/data/interim_data/socc_metadata_extra.pkl", "rb") as infile:
+    with open("code/data/interim_data/socc_metadata.pkl", "rb") as infile:
         saved_metadata = pickle.load(infile)
     datatypes = [datatype for datatype in GHCND_types if datatype not in saved_data.columns]
     assert len(datatypes) > 0, "No more datatypes to scrape! Yay!"
