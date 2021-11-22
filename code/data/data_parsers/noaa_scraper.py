@@ -23,8 +23,8 @@ Also good to make sure other person is not doing it at the same time, but I am s
 os.chdir(f"{os.path.dirname(os.path.realpath(__file__))}/../../..")
 
 #NOAA API Info
-token = "JcvRdALGKywGfyxsGdulfWCXhJBhpqFO"
-# token = "AKpYgimLAJUNlIcGvznUXauwESRpjdSG"
+# token = "JcvRdALGKywGfyxsGdulfWCXhJBhpqFO"
+token = "AKpYgimLAJUNlIcGvznUXauwESRpjdSG"
 noaa_api = "https://www.ncdc.noaa.gov/cdo-web/api/v2/"
 parameters = {
     "datasets": ["datatypeid", "locationid", "stationid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
@@ -308,7 +308,8 @@ def get_all_datatypes(datatypes, data, metadata = {}, max_iters = 10):
 #Interested Datatypes
 stateids = ["FIPS:06", "FIPS:04", "FIPS:32"] #State ID's for California, Arizona, Nevada
 GHCND_types_dropped = [ "WT01", "WT04", "WT08", "DAPR", "MDPR", "TSUN"]
-GHCND_types = [ "AWND", "PRCP", "TAVG", "TMAX", "TMIN", "WSFG", "WDFG", "SNOW", "SN32", "SN33", "SX31", "SX32", "SX33"]
+# GHCND_types = [ "AWND", "PRCP", "TAVG", "TMAX", "TMIN", "WSFG", "WDFG", "SNOW", "SN32", "SN33", "SX31", "SX32", "SX33"]
+GHCND_types = ["TSUN"]
 GSOM_types = ["TAVG", "TMAX", "TMIN", "EVAP", "TSUN", "MN01", "MX01", "CLDD", "PRCP", "DP01", "DT00", "DT32", "DX32", "DX70", "DX90",
 "MN02", "MN03", "MX02", "MX03"]
 #For GSOM just need to change to 10 year data range; pass dataset argument through. Add merge functionality to match months. 
@@ -326,7 +327,7 @@ try:
 except FileNotFoundError:
     with open("code/data/clean_data/wfas/SOCC_cleaned.pkl", "rb") as infile:
         socc = pickle.load(infile) 
-        get_all_datatypes(datatypes=GHCND_types, data=socc)
+        get_all_datatypes(datatypes=GHCND_types, data=socc, max_iters=30)
 except NewConnectionError or SocketError or MaxRetryError or OSError:
     print("CONNECTION ERROR")
     print("Waiting 10 seconds before restarting")

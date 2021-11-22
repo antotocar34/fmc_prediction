@@ -3,7 +3,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import os, pickle
-from datetime import timedelta
+from datetime import timedelta, datetime
 from tqdm import tqdm
 import numpy as np
 from time import time
@@ -16,7 +16,7 @@ ids = pd.read_pickle("code/data/clean_data/try/SOCC_cleaned_tryid.pkl")
 ids = ids.groupby("Fuel").agg({"AccSpeciesID":"max"})
 socc = socc.drop(["GACC", "State", "Group", "Latitude", "Longitude", "Zip"], axis=1)
 socc = socc[socc["Fuel"].notna()]
-
+socc["Fuel"] = socc["Fuel"].apply(lambda x: "Chamise" if x == "chamise" else x)
 #~~~~~~~~~~~README: There are multiple accSpceiesID for single plant chamise and Chamise. 
 #Can probably fix just by changing 'chamise' to 'Chamise' for the single site that this occurs.
 
@@ -25,7 +25,9 @@ socc["AccSpeciesID"] = species_ids
 # %%
 #Missing many many observations for DAPR, MDPR, WT01, WT04, WT08 (medium) so drop for now
 socc = socc.drop(["DAPR", "MDPR", "WT01", "WT04", "WT08", "SNOW"], axis=1)
-
+# %%
+#Add growth cycle variable given by spanish study
+socc.insert(4, "growth_cycle", socc["Date"].apply(lambda x: np.cos((2*np.pi*x.timetuple().tm_yday/365) - 0.59)))
 #Drop mismeasured observations
 socc = socc[socc["Percent"] < 500]
 #NEED TO CONSIDER CERTAIN 0's in our aggregated sums to be NANS dependent on the daily estimates.

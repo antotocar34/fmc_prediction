@@ -1,0 +1,63 @@
+---
+title: "LFMC NOAA Bayesian Modelling"
+author: "Clinton Leung"
+date: "22/11/2021"
+output: 
+  html_document:
+    toc:TRUE
+    toc_depth:3
+    number_sections:TRUE
+---
+
+```{r setup, include=FALSE}
+
+
+knitr::opts_chunk$set(echo = TRUE, cache=TRUE)
+library(tidyverse)
+library(ggplot2)
+library(glmnet)
+library(mombf)
+library(rstanarm)
+library(caret)
+PATH = "/home/clinton/Documents/statistical_inference/stat_proj/fmc_prediction/code"
+knitr::opts_knit$set(root.dir = PATH)
+```
+
+```{r}
+df = read.csv("data/clean_data/noaa/socc_noaa_complete.csv")
+
+```
+
+```{r}
+df_1<- subset(df, Fuel == 'Chamise', !names(df) %in% c("Site", "Fuel", "Date", "X", "AccSpeciesID"))
+
+set.seed(1000)
+
+trainRowNum <- createDataPartition(df_1$Percent, p = 0.8, list=F)
+trainData <- df_1[trainRowNum,]
+testData <- df_1[-trainRowNum,]
+xtrain <- trainData[,2:70]
+ytrain <- trainData[,1]
+xtest <- testData[,2:70]
+ytest <- testData[,1]
+```
+
+```{r}
+imputer <- preProcess(trainData, method=c('YeoJohnson', 'center', 'scale', 'bagImpute'))
+trainData <- predict(imputer, newdata=trainData)
+```
+```{r}
+fitControl <- trainControl(method="cv", number=5)
+model <- train(Percent~., data=trainData, method="glmnet", trControl = fitControl)
+
+```
+
+```{r}
+fit.bayes <- stan_glm(Percent ~ ., data=trainData, algorithm="sampling")
+```
+
+```{r}
+fit.mombf <- modelSelection(Percent~., data=trainData, priorCoef=zellnerprior(taustd=1), priorDelta=modelbbprior(1,1))
+pred = fit.mombf.predict(xtest)
+```
+
