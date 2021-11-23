@@ -7,30 +7,69 @@ from datetime import timedelta, datetime
 from tqdm import tqdm
 import numpy as np
 from time import time
+from sklearn.preprocessing import PolynomialFeatures
 
 os.chdir(f"{os.path.dirname(os.path.realpath(__file__))}/../..")
 
 #%%
+
+#DATA PROCESSING
+
 socc = pd.read_pickle("code/data/interim_data/socc_noaa_agg.pkl")
 ids = pd.read_pickle("code/data/clean_data/try/SOCC_cleaned_tryid.pkl")
 ids = ids.groupby("Fuel").agg({"AccSpeciesID":"max"})
+
+#Further Cleaning steps
 socc = socc.drop(["GACC", "State", "Group", "Latitude", "Longitude", "Zip"], axis=1)
-socc = socc[socc["Fuel"].notna()]
-socc["Fuel"] = socc["Fuel"].apply(lambda x: "Chamise" if x == "chamise" else x)
-#~~~~~~~~~~~README: There are multiple accSpceiesID for single plant chamise and Chamise. 
+socc = socc[socc["Fuel"].notna()] 
+socc = socc[socc["Percent"] < 500] #Drop mismeasured target variables
+socc["Fuel"] = socc["Fuel"].apply(lambda x: "Chamise" if x == "chamise" else x) #Fix chamise name
+socc = socc.drop(["DAPR", "MDPR", "WT01", "WT04", "WT08", "SNOW"], axis=1) #These columns have too few obs
+socc.insert(4, "D", socc["Date"].apply(lambda x: np.cos((2*np.pi*x.timetuple().tm_yday/365) - 0.59))) #Add growth cycle based on day
+species_ids = [ids.loc[fuel.lower(), "AccSpeciesID"] for fuel in socc["Fuel"]]
+socc.insert(2, "AccSpeciesID", species_ids)
+sum5 = [col for col in socc.columns if "SUM5" in col]
+socc = socc.drop(sum5, axis=1)
+
+feature_interactions = ['PRCP', 'TAVG', 'TMAX', 'TMIN', 'WSFG', 'WDFG', 'AWND', 'SN32', 'SN33',
+       'SX31', 'SX32', 'SX33', 'PRCP_SUM3', 'PRCP_SUM7', 'PRCP_SUM15',
+       'TAVG_SUM3', 'TAVG_SUM7', 'TAVG_SUM15', 'TMAX_SUM3', 'TMAX_SUM7',
+       'TMAX_SUM15', 'TMIN_SUM3', 'TMIN_SUM7', 'TMIN_SUM15', 'SN32_SUM3',
+       'SN32_SUM7', 'SN32_SUM15', 'SN33_SUM3', 'SN33_SUM7', 'SN33_SUM15',
+       'SX31_SUM3', 'SX31_SUM7', 'SX31_SUM15', 'SX32_SUM3', 'SX32_SUM7',
+       'SX32_SUM15', 'SX33_SUM3', 'SX33_SUM7', 'SX33_SUM15', 'AWND_SUM3',
+       'AWND_SUM7', 'AWND_SUM15', 'WDFG_SUM3', 'WDFG_SUM7', 'WDFG_SUM15',
+       'WSFG_SUM3', 'WSFG_SUM7', 'WSFG_SUM15']
+def gen_cycle_interactions(data, cyclename, cols):
+    df = data.copy()
+    for col in cols:
+        df[f"{cyclename}_{col}"] = df[cyclename] * df[col]
+    return df
+
+socc_interacted = gen_cycle_interactions(socc, "D", feature_interactions)
+
+
+#Save
+# socc_interacted.to_csv("code/data/clean_data/noaa/socc_noaa_interacted.csv")
+# socc_interacted.to_pickle("code/data/clean_data/noaa/socc_noaa_interacted.pkl")
+# socc.to_csv("code/data/clean_data/noaa/socc_noaa_complete.csv")
+# socc.to_pickle("code/data/clean_data/noaa/socc_noaa_complete.pkl")
+
+#%%
+# poly = PolynomialFeatures()
+# X = socc.drop(["Site", "Date", "AccSpeciesID", "Fuel"], axis=1)
+# interacted = poly.fit_transform(X)
+# interacted = pd.DataFrame(interacted, columns=poly.get_feature_names_out())
+# socc_interacted = pd.concat([socc[["Site", "Date", "AccSpeciesID", "Fuel"]], interacted], axis=0, irgnore_index=True)
+
+#%%
+
+#~~~~~~~~~~~README: There are multiple accSpceiesID for single plant chamise and Chamise.
+# 
+# #OTHER NOTE IS WHAT TO DO WITH MISSING VALUES IN TERMS OF AGGREGATED SUMS... MAYBE REWRITE THE FUNC TO USE MEAN WHEN MISSING? 
 #Can probably fix just by changing 'chamise' to 'Chamise' for the single site that this occurs.
 
-species_ids = [ids.loc[fuel.lower(), "AccSpeciesID"] for fuel in socc["Fuel"]]
-socc["AccSpeciesID"] = species_ids
-# %%
-#Missing many many observations for DAPR, MDPR, WT01, WT04, WT08 (medium) so drop for now
-socc = socc.drop(["DAPR", "MDPR", "WT01", "WT04", "WT08", "SNOW"], axis=1)
-# %%
-#Add growth cycle variable given by spanish study
-socc.insert(4, "growth_cycle", socc["Date"].apply(lambda x: np.cos((2*np.pi*x.timetuple().tm_yday/365) - 0.59)))
-#Drop mismeasured observations
-socc = socc[socc["Percent"] < 500]
-#NEED TO CONSIDER CERTAIN 0's in our aggregated sums to be NANS dependent on the daily estimates.
+
 #%%
 plant_traits = pd.read_pickle("code/data/clean_data/try/plant_traits.pkl")
 #%%

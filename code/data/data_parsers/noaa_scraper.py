@@ -122,22 +122,23 @@ def get_stationid(site_coord, station_df):
     distance = [geodist(site_coord, (station_df.loc[i, "latitude"], station_df.loc[i, "longitude"])).km for i in station_df.index]
     return station_df.loc[distance.index(min(distance)), "id"]
 
-def bin_dates(startdate, enddate):
+def bin_dates(startdate, enddate, n = 364):
     '''Bins dates into a list of date ranges no greater than 998 days different
         Args:
             startdate: First date in datetime format
             enddate: Last date in datetime format
+            n: day range to bin for
         Returns:
             A list of of tuples with date ranges that only span up to 364 days.'''
 
     assert enddate >= startdate, "End date is earllier than start date."
     rng = (enddate-startdate).days
     dateranges = []
-    for i in range(rng//364):
-        start = str((startdate + timedelta(days=i*364)).date())
-        stop = str((startdate + timedelta(days=(i+1)*364+1)).date())
+    for i in range(rng//n):
+        start = str((startdate + timedelta(days=i*n)).date())
+        stop = str((startdate + timedelta(days=(i+1)*n+1)).date())
         dateranges.append((start, stop))
-    dateranges.append((str((startdate + timedelta(days=(rng//364) * 364)).date()), str(enddate.date())))
+    dateranges.append((str((startdate + timedelta(days=(rng//n) * n)).date()), str(enddate.date())))
     return dateranges
 
 def parse_noaa_query(noaa_query, site, datatype):
@@ -178,9 +179,9 @@ def get_data(site, datatype, df, dataset="GHCND", max_iters = 10):
     results = []
     data = df.groupby("Site").mean()
     coord = (data.loc[site, "Latitude"], data.loc[site, "Longitude"])
-    maxdate = df.groupby("Site").max().loc[site, "Date"] + timedelta(days=1)
-    mindate = df.groupby("Site").min().loc[site, "Date"] - timedelta(days=1)
-    dateranges = bin_dates(mindate, maxdate)
+    maxdate = df.groupby("Site").max().loc[site, "Date"] + timedelta(days=1) #Changed here as well
+    mindate = df.groupby("Site").min().loc[site, "Date"] - timedelta(days=15)
+    dateranges = bin_dates(mindate, maxdate, n = 364)
     # dateranges = [((mindate - timedelta(days=21)).date(), mindate.date())]
     for daterange in tqdm(dateranges, desc=f"Getting {datatype} for {site}", colour="green"):
         startdate, enddate = daterange
@@ -212,7 +213,7 @@ def get_data(site, datatype, df, dataset="GHCND", max_iters = 10):
                 break
     return results
 
-def get_datatype_sitesloop(datatype, data, result = pd.DataFrame(), meta = {}, max_iters = 10):
+def get_datatype_sitesloop(datatype, data, dataset = "GHCND", result = pd.DataFrame(), meta = {}, max_iters = 10):
     '''Given a datatype, gets the data for all sites and returns single concatenated dataframe. Also returns the meta data as a dictionary of dictionaries; site:datatype:stations
     Args:
         datatype: Str. NOAA Datatype to retrieve
@@ -232,7 +233,7 @@ def get_datatype_sitesloop(datatype, data, result = pd.DataFrame(), meta = {}, m
 
     #Loop through sites and getting data to append
     for site in tqdm(sites, desc=f"Getting data for {datatype}", colour="blue"): 
-        noaa_query = get_data(site, datatype, df = data, max_iters = max_iters)
+        noaa_query = get_data(site, datatype, dataset=dataset, df = data, max_iters = max_iters)
         if noaa_query == []:
             result = result.append({"Site":site}, ignore_index=True)
             continue
@@ -246,7 +247,7 @@ def get_datatype_sitesloop(datatype, data, result = pd.DataFrame(), meta = {}, m
             pickle.dump(result, outfile)
         with open(f"code/data/interim_data/socc_metadata_{datatype}.pkl", "wb") as outfile:
             pickle.dump(meta, outfile)
-        tqdm.write(f"{datatype} data for {site} saved in intermediate DF.")
+        tqdm.write(f"{datatype}_{dataset} data for {site} saved in intermediate DF.")
     return result, meta
 
 def get_all_datatypes(datatypes, data, metadata = {}, max_iters = 10):
@@ -314,6 +315,7 @@ GSOM_types = ["TAVG", "TMAX", "TMIN", "EVAP", "TSUN", "MN01", "MX01", "CLDD", "P
 "MN02", "MN03", "MX02", "MX03"]
 #For GSOM just need to change to 10 year data range; pass dataset argument through. Add merge functionality to match months. 
 
+#%%
 
 #Open last saved file if it exists. If not start anew.
 try:
