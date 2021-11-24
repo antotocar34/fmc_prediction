@@ -18,57 +18,37 @@ library(ggplot2)
 library(glmnet)
 library(mombf)
 library(rstanarm)
-library(bayestestR)
 library(caret)
 PATH = "/home/clinton/Documents/statistical_inference/stat_proj/fmc_prediction/code"
 knitr::opts_knit$set(root.dir = PATH)
 ```
 
 ```{r}
-df = read.csv("data/clean_data/noaa/socc_noaa_interacted.csv")
+df = read.csv("data/clean_data/noaa/socc_noaa_complete.csv")
 
 ```
 
 ```{r}
-df<- subset(df, Fuel == 'Chamise', !names(df) %in% c("Site", "Fuel", "Date", "X", "AccSpeciesID"))
+df_1<- subset(df, Fuel == 'Chamise', !names(df) %in% c("Site", "Fuel", "Date", "X", "AccSpeciesID"))
 
 set.seed(1000)
 
-trainRowNum <- createDataPartition(df$Percent, p = 0.8, list=F)
-trainData <- df[trainRowNum,]
-testData <- df[-trainRowNum,]
-xtrain <- trainData[,2:98]
+trainRowNum <- createDataPartition(df_1$Percent, p = 0.8, list=F)
+trainData <- df_1[trainRowNum,]
+testData <- df_1[-trainRowNum,]
+xtrain <- trainData[,2:70]
 ytrain <- trainData[,1]
-xtest <- testData[,2:98]
+xtest <- testData[,2:70]
 ytest <- testData[,1]
 ```
 
 ```{r}
-imputer <- preProcess(xtrain, method=c('YeoJohnson', 'center', 'scale', 'bagImpute'))
-xtrain <- predict(imputer, newdata=xtrain)
-xtest <- predict(imputer, newdata=xtest)
-```
+imputer <- preProcess(trainData, method='knnImpute')
+trainData <- predict(imputer, newdata=trainData)
+transformer <- preProcess(trainData, method="YeoJohnson")
+trainData <- predict(transformer, newdata=trainData)
+fitControl <- trainControl(method="cv", number=5, savePredictions = T)
+model <- train(Percent~.^2, data=trainData, method="glmnet", trControl = fitControl, preProcess=c("center", "scale"))
 
-
-```{r}
-fitControl <- trainControl(method="cv", number=5)
-model <- train(x=xtrain, y=ytrain, data=trainData, method="glmnet")
-```
-```{r}
-glmpred <- predict(model, xtest)
-cor(glmpred, ytest)^2
-mean(abs(glmpred-ytest))/var(ytest)^0.5
-```
-
-```{r}
-fit.bayes <- stan_glm(y=ytrain, x=xtrain, data=trainData, algorithm="sampling")
-describe_posterior(fit.bayes)
-```
-
-```{r}
-fit.mombf <- modelSelection(x=xtrain, y=ytrain, data=trainData, priorCoef=zellnerprior(taustd=1), priorDelta=modelbbprior(1,1))
-mombfpred <- predict(fit.mombf)
-cor(mombfpred[,1], ytrain)^2
-mean(abs(mombfpred[,1]-ytest))/var(ytest)^0.5
 ```
 
