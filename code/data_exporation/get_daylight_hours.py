@@ -4,7 +4,6 @@ import os, pickle
 from datetime import date, datetime, timedelta
 import numpy as np
 from tqdm import tqdm
-from sklearn.impute import SimpleImputer, KNNImputer
 import requests
 
 os.chdir(f"{os.path.dirname(os.path.realpath(__file__))}/../..")
@@ -25,8 +24,13 @@ def get_daylight_hours(date, lat, long):
     hours = float(hours[0]) + float(hours[1])/60
     return hours
 
-socc = pd.read_pickle("code/data/raw_data/noaa/socc_noaa.pkl")
+socc_geo = pd.read_pickle("code/data/clean_data/wfas/SOCC_cleaned.pkl")
+socc_geo = socc_geo.groupby("Site").agg({"Latitude":"max", "Longitude":"max"}).reset_index()
+
+socc = pd.read_pickle("code/data/interim_data/socc_noaa_filtered_fulldaterange_imputed.pkl")
+socc = pd.merge(socc, socc_geo, how="left", on="Site")
 socc = socc.loc[:,["Date", "Site", "Latitude", "Longitude"]]
+
 try:
     with open("code/data/tmp/daylight_hours.pkl", "rb") as infile:
         daylight_hours = pickle.load(infile) 
@@ -40,4 +44,3 @@ for i in tqdm(list(range(len(daylight_hours), len(socc)))):
 socc["daylight_hours"] = daylight_hours
 socc.to_pickle("code/data/raw_data/noaa/socc_noaa_daylight_hours.pkl")
 #%%
-for col in
