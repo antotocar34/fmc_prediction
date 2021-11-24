@@ -39,3 +39,5 @@ for i in tqdm(list(range(len(daylight_hours), len(socc)))):
             pickle.dump(daylight_hours, outfile) 
 socc["daylight_hours"] = daylight_hours
 socc.to_pickle("code/data/raw_data/noaa/socc_noaa_daylight_hours.pkl")
+#%%
+for col in
