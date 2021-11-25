@@ -12,7 +12,8 @@ URL_ROOT = "https://api.synopticdata.com/v2/"
 TIMESERIES = "stations/timeseries"
 METADATA = "stations/metadata"
 
-TOKEN = "38938170bc084e6d84a168f1d579f16c"
+# TOKEN = "38938170bc084e6d84a168f1d579f16c"
+TOKEN = "eb1a8a2deb914f9689235a84eeba6653"
 API_KEY = "KywATwJ9eB2PxUGzCtZ8tn15e12xtSt1oo4KRDmJti"
 
 pot_vars = ["air_temp", "dew_point_temperature", "relative_humidity", "wind_speed", "pressure", "solar_radiation",
@@ -128,6 +129,8 @@ for i in socc.index:
     socc.loc[i,"station_distance"] = get_stationdist(coord, socc.loc[i,"nearest_stid"], station_list)
     socc.loc[i, "station_start"], socc.loc[i,"station_end"] = get_stationdaterange(socc.loc[i, "nearest_stid"], station_list)
 socc = socc.sort_values(by="station_distance")
+socc[socc["station_distance"] <= 30]
+socc.to_pickle("code/data/raw_data/synoptic/socc_synoptic_stations.pkl")
 # %%
 def get_data(station, startdate, enddate, vars, defaults = default_params):
     params = {
@@ -138,12 +141,15 @@ def get_data(station, startdate, enddate, vars, defaults = default_params):
     }
     return dict_query(url_end=TIMESERIES, params=params, defaults=defaults)
 
-socc_stations = socc[socc["station_distance"] <= 30].copy().groupby("nearest_stid").agg({"station_start" : "min", "station_end" : "max"})
+socc_stations = socc.copy().groupby("nearest_stid").agg({"station_start" : "min", "station_end" : "max"})
 
 #%%
-for station in socc_stations.index:
+for station in ["WIRC1"]:
     data = get_data(station, startdate=socc_stations.loc[station, "station_start"], enddate=socc_stations.loc[station, "station_end"], vars=vars)
     with open(f"code/data/raw_data/synoptic/{station}.pkl", "wb") as outfile:
         pickle.dump(data, outfile)
     print(f"{station} data saved!")
+# %%
+with open(f"code/data/raw_data/synoptic/WIRC1.pkl", "rb") as infile:
+    data = pickle.load(infile)
 # %%
