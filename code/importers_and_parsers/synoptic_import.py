@@ -12,9 +12,15 @@ URL_ROOT = "https://api.synopticdata.com/v2/"
 TIMESERIES = "stations/timeseries"
 METADATA = "stations/metadata"
 
+<<<<<<< HEAD
 # TOKEN = "38938170bc084e6d84a168f1d579f16c"
 TOKEN = "eb1a8a2deb914f9689235a84eeba6653"
 API_KEY = "KywATwJ9eB2PxUGzCtZ8tn15e12xtSt1oo4KRDmJti"
+=======
+TOKEN = "38938170bc084e6d84a168f1d579f16c"
+#API_KEY = "KywATwJ9eB2PxUGzCtZ8tn15e12xtSt1oo4KRDmJti"
+API_KEY = "027240cbc9b540cc932c3ba8024f0b2d"
+>>>>>>> 33a0e3c03df1cbe7df2eeb28b4c0b07df511d309
 
 pot_vars = ["air_temp", "dew_point_temperature", "relative_humidity", "wind_speed", "pressure", "solar_radiation",
 "soil_temp", "precip_accum", "precip_accum_24_hour", "heat_index"]
