@@ -3,11 +3,65 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pickle, os
 import matplotlib.pyplot as plt
+import requests, time
+from tqdm import tqdm
+
 
 os.chdir(f"{os.path.dirname(os.path.realpath(__file__))}/../..")
 
-
 # %%
+good_sites = ['Angeles Forest Hwy', 'Barnes Mountain', 'Big Creek', 'Bridgeport', 'Cachuma', 'Converse', 'Gold Creek', 'Happy Canyon', 'Highway 168',
+ 'Lincoln Crest', 'Mammoth Airport', 'Midpines- New Growth', 'Mt. Emma', 'Oakhurst', 'Painte Cove', 'Pine Acres', 'Pozo', 'Priest Grade', 'Shaver Lake', 'Sisar Canyon,Upper Ojai Valley',
+ 'Spunky Canyon', 'Templeton', 'Tollhouse', ' Vallecito', 'Frazier Park']
+med_sites = ['Banning', 'Barrett', 'Black Star CNF', 'Cottonwood', 'Crestview sagebrush old growth', 'Deluz-New Growth', 'East Grade', 'El Cariso CNF',
+ 'Fallbrook-New Growth', 'Fallbrook-Old Growth', 'Lady Bug', 'Laguna Beach', 'Mountain Empire',
+ 'Posta Mountain', 'Rainbow Valley-New Growth', 'Rainbow Valley-Old Growth', 'San Felipe', 'Suncrest', "Tehachapi new growth", 'Tehachapi old growth', 'Temescal CNF', 'Frazier Park new growth', 'Frazier Park old growth']
+token = "AKpYgimLAJUNlIcGvznUXauwESRpjdSG"
+noaa_api = "https://www.ncdc.noaa.gov/cdo-web/api/v2/"
+parameters = {
+    "datasets": ["datatypeid", "locationid", "stationid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
+    "datacategories" : ["datasetid", "locationid", "stationid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
+    "datatypes" : ["datasetid", "datacategoryid", "locationid", "stationid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
+    "locationcategories": ["datasetid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
+    "locations": ["datasetid", "datacategoryid", "locationcategoryid", "startdate", "enddate", "sortfield", "sortorder", "limit", "offset"],
+    "stations" : ["datasetid", "datacategoryid", "locationcategoryid", "datatypeid", "startdate", "enddate", "extent", "sortfield", "sortorder", "limit", "offset"],
+    "data" : ["datasetid", "locationid", "stationid", "datatypeid", "startdate", "enddate", "units", "sortfield", "sortorder", "limit", "offset", "includemetadata"]
+}        
+def get_noaa(data:str, url = noaa_api, token = token, override = False, parameters = parameters, **options):
+    '''Sets an endpoint to be passed to noaa api.
+
+    Arguments:
+        data: "datasets", "locations", "locationcategories", or "stations".
+        provide optional parameters in either list or string format. 
+        dates must be in yyyy-mm-dd format. 
+        see https://www.ncdc.noaa.gov/cdo-web/webservices/v2#gettingStarted for more info on endpoint options.
+        Override allows you to set data as something else such as "locations/ST"
+    Returns:
+        HTTPS response'''
+
+    if data not in parameters.keys() and override == False:
+        print(f"Unsupported type given. Supported types are: {', '.join(list(parameters.keys()))}")
+        return
+    if any(option not in parameters[data] for option in options):
+        print(f"Unsupported option given. Supported parameters for {data} are: {', '.join(parameters[data])}")
+        return
+    optional_params = []
+    for key, option in options.items():
+        if isinstance(option, list):
+            for each in option:
+                optional_params.append(f"{key}={each}")
+        else:
+
+            optional_params.append(f"{key}={option}")   
+    endpoint = f"{data}?{'&'.join(optional_params)}"
+    headers = {"token" : token}
+    r = requests.get(url=url + endpoint, headers = headers)
+    if r.status_code == 429:
+        tqdm.write("Reached maximum requests for the day. Start again next day!")
+        exit()
+    time.sleep(0.25)
+    return r
+
 with open("code/data/raw_data/noaa/socc_metadata.pkl", "rb") as infile:
     metadata = pickle.load(infile)
 
@@ -44,5 +98,3 @@ for col in station_counts.index:
     plt.savefig(f"code/data_exporation/figs/relevant_stations/{col}.png")
     plt.clf()
 # %%
-
-good_sites = [""]
