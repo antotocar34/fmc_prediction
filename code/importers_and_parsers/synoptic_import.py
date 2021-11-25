@@ -13,7 +13,8 @@ TIMESERIES = "stations/timeseries"
 METADATA = "stations/metadata"
 
 TOKEN = "38938170bc084e6d84a168f1d579f16c"
-API_KEY = "KywATwJ9eB2PxUGzCtZ8tn15e12xtSt1oo4KRDmJti"
+#API_KEY = "KywATwJ9eB2PxUGzCtZ8tn15e12xtSt1oo4KRDmJti"
+API_KEY = "027240cbc9b540cc932c3ba8024f0b2d"
 
 pot_vars = ["air_temp", "dew_point_temperature", "relative_humidity", "wind_speed", "pressure", "solar_radiation",
 "soil_temp", "precip_accum", "precip_accum_24_hour", "heat_index"]
