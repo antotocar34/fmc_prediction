@@ -12,20 +12,12 @@ URL_ROOT = "https://api.synopticdata.com/v2/"
 TIMESERIES = "stations/timeseries"
 METADATA = "stations/metadata"
 
-<<<<<<< HEAD
 # TOKEN = "38938170bc084e6d84a168f1d579f16c"
-TOKEN = "eb1a8a2deb914f9689235a84eeba6653"
-API_KEY = "KywATwJ9eB2PxUGzCtZ8tn15e12xtSt1oo4KRDmJti"
-=======
-TOKEN = "38938170bc084e6d84a168f1d579f16c"
+# TOKEN = "eb1a8a2deb914f9689235a84eeba6653"
 #API_KEY = "KywATwJ9eB2PxUGzCtZ8tn15e12xtSt1oo4KRDmJti"
-API_KEY = "027240cbc9b540cc932c3ba8024f0b2d"
->>>>>>> 33a0e3c03df1cbe7df2eeb28b4c0b07df511d309
-
-pot_vars = ["air_temp", "dew_point_temperature", "relative_humidity", "wind_speed", "pressure", "solar_radiation",
-"soil_temp", "precip_accum", "precip_accum_24_hour", "heat_index"]
-vars = ["air_temp", "relative_humidity", "wind_speed", "solar_radiation",
-"soil_temp", "precip_accum"]
+TOKEN = "027240cbc9b540cc932c3ba8024f0b2d"
+# TOKEN = "7f7b806135ef4345b833a65e46fad88d"
+vars = ["air_temp", "relative_humidity", "wind_speed", "solar_radiation", "precip_accum_one_hour"]
 
 default_params = {
     "token":TOKEN,
@@ -117,7 +109,7 @@ socc = socc.groupby("Site").agg({"GACC" : "max", "Date": ["max", "min"], "Latitu
 socc = socc[socc["values"] > 300]
 
 #%%
-#Load Station Data
+# Load Station Data
 # stations = dict_query(METADATA, params=station_list_params)
 # station_list = pd.DataFrame(stations["STATION"])
 # station_list = station_list[(station_list["STATUS"] == "ACTIVE") & (station_list["RESTRICTED"] == False)]
@@ -125,18 +117,20 @@ socc = socc[socc["values"] > 300]
 # station_list["enddate"] = station_list["PERIOD_OF_RECORD"].apply(lambda x: (parser.isoparse(x["end"])).date())
 # station_list = station_list.drop(columns=["STATE", "PERIOD_OF_RECORD", "TIMEZONE", "STATUS", "RESTRICTED"])
 # station_list = station_list.set_axis([col.lower() for col in station_list.columns], axis=1)
-#station_list = station_list.reset_index(drop=True)
-# station_list.to_pickle("code/data/tmp/station_list.pkl")
-station_list = pd.read_pickle("code/data/tmp/station_list.pkl")
+# station_list = station_list.reset_index(drop=True)
+# station_list.to_pickle("code/data/tmp/station_list2.pkl")
+station_list = pd.read_pickle("code/data/tmp/station_list2.pkl")
 #%%
+ci_mask = station_list["stid"].apply(lambda x: "CI" in x)
+station_list = station_list[ci_mask].reset_index(drop=True)
 for i in socc.index:
     coord = (socc.loc[i,"latitude"], socc.loc[i,"longitude"])
     socc.loc[i,"nearest_stid"] = get_stationid(coord, station_list)
     socc.loc[i,"station_distance"] = get_stationdist(coord, socc.loc[i,"nearest_stid"], station_list)
     socc.loc[i, "station_start"], socc.loc[i,"station_end"] = get_stationdaterange(socc.loc[i, "nearest_stid"], station_list)
 socc = socc.sort_values(by="station_distance")
-socc[socc["station_distance"] <= 30]
-socc.to_pickle("code/data/raw_data/synoptic/socc_synoptic_stations.pkl")
+socc = socc[socc["station_distance"] <= 30]
+socc.to_pickle("code/data/raw_data/synoptic/socc_synoptic_stations2.pkl")
 # %%
 def get_data(station, startdate, enddate, vars, defaults = default_params):
     params = {
@@ -147,15 +141,16 @@ def get_data(station, startdate, enddate, vars, defaults = default_params):
     }
     return dict_query(url_end=TIMESERIES, params=params, defaults=defaults)
 
-socc_stations = socc.copy().groupby("nearest_stid").agg({"station_start" : "min", "station_end" : "max"})
+
+socc_stations = socc.copy().groupby("nearest_stid").agg({"station_start" : "min", "station_end" : "max", "station_distance":"min"}).sort_values(by="station_distance")
 
 #%%
-for station in ["WIRC1"]:
+for station in ["CI231"]:
     data = get_data(station, startdate=socc_stations.loc[station, "station_start"], enddate=socc_stations.loc[station, "station_end"], vars=vars)
-    with open(f"code/data/raw_data/synoptic/{station}.pkl", "wb") as outfile:
+    with open(f"code/data/raw_data/synoptic/stations2/{station}.pkl", "wb") as outfile:
         pickle.dump(data, outfile)
     print(f"{station} data saved!")
 # %%
-with open(f"code/data/raw_data/synoptic/WIRC1.pkl", "rb") as infile:
-    data = pickle.load(infile)
+# with open(f"code/data/raw_data/synoptic/{station}_prev.pkl", "rb") as infile:
+#     data = pickle.load(infile)
 # %%
