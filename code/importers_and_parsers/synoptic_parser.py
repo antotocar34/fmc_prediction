@@ -290,11 +290,11 @@ def parse_synoptic(station, dirpath):
     df["month"] = df["date_time"].dt.month
 
     #Remove Outliers
-    df["solar_rad"] = df["solar_rad"].apply(lambda x: x if (x >=0 and x < 1300) else np.nan)
-    df["precip"] = df["precip"].apply(lambda x: x if (x >= 0 and x < 40) else np.nan)
+    df["solar_rad"] = df["solar_rad"].apply(lambda x: x if (x >=0 and x < 1100) else np.nan)
+    df["precip"] = df["precip"].apply(lambda x: x if (x >= 0 and x < 20) else np.nan)
     df["rel_humid"] = df["rel_humid"].apply(lambda x: x if (x>= 0 and x <= 100) else np.nan)
     df["wind_speed"] = df["wind_speed"].apply(lambda x: x if (x>=0 and x<=50) else np.nan)
-    df["temp"] = df["temp"].apply(lambda x: x if (x>-50 and x<55) else np.nan)
+    df["temp"] = df["temp"].apply(lambda x: x if (x>-15 and x<55) else np.nan)
 
     for stat in ["rel_humid", "temp"]:
         df = get_noon_stat(df, stat)
@@ -315,6 +315,7 @@ def parse_synoptic(station, dirpath):
         "date", "year", "month", "solar_rad_max", "solar_rad_avg", "precip", "rel_humid_min", "rel_humid", "rel_humid_12", "wind_speed_max", 
         "wind_speed_min", "wind_speed_avg", "temp_max", "temp_min", "temp_avg", "temp_12"
     ], axis=1)
+    df["precip"] = df["precip"].apply(lambda x: x if (x >= 0 and x < 100) else np.nan)
 
     df = get_monthly_stat(df, "temp_avg")
     df = local_impute(df, cols=[col for col in df.columns if col not in ["date", "year", "month"]])
@@ -327,18 +328,18 @@ def extract_features_synoptic(df, station, station_meta, tavg="temp_avg", t_12="
     df["DC"] = 15
     df["DMC"] = 6
     for i in tqdm(df.index, desc="Computing {station} stats 1/2"):
-        df.loc[i, "heat_index"] = get_heatindex(i, df, tavg=tavg) #Compute Heat Index
+        # df.loc[i, "heat_index"] = get_heatindex(i, df, tavg=tavg) #Compute Heat Index
         prev_dc = df[(df[date] == df.loc[i,date] - timedelta(days=1))]["DC"].sum() #Compute DC
         df.loc[i, "DC"] = compute_DC(prev_dc, prcp_eff=df.loc[i, "precip_effective"], evap_pot=df.loc[i,"evap_pot"])
-        df.loc[i, "daylight"] = get_daylight_hours(i, df, station=station, station_meta=station_meta) #Get Daylight hours
-    df["temp_effective"] = 0.36 * (3 * df["temp_max"] - df["temp_min"]) * (df["daylight"] / (24 - df["daylight"])) #Generate Effective Temp for PET
-    for i in tqdm(df.index, desc="Computing {station} stats 2/2"): # Add PET
-        df.loc[i, "pet"] = compute_pet(t_eff = df.loc[i,"temp_effective"], daylight_hours=df.loc[i,"daylight"], heat_index=df.loc[i,"heat_index"])
-        df.loc[i, "emc"] = compute_EMC(i, df, hum_col="rel_humid", tavg=tavg)
+        # df.loc[i, "daylight"] = get_daylight_hours(i, df, station=station, station_meta=station_meta) #Get Daylight hours
+    # df["temp_effective"] = 0.36 * (3 * df["temp_max"] - df["temp_min"]) * (df["daylight"] / (24 - df["daylight"])) #Generate Effective Temp for PET
+    # for i in tqdm(df.index, desc="Computing {station} stats 2/2"): # Add PET
+    #     df.loc[i, "pet"] = compute_pet(t_eff = df.loc[i,"temp_effective"], daylight_hours=df.loc[i,"daylight"], heat_index=df.loc[i,"heat_index"])
+        # df.loc[i, "emc"] = compute_EMC(i, df, hum_col="rel_humid", tavg=tavg)
         prev_DMC = df[df["date"] == df.loc[i,"date"] - timedelta(days=1)]["DMC"].sum() #Get Previous DMC and then compute current DMC
         df.loc[i, "DMC"] = compute_DMC(prev_DMC, df.loc[i, "precip"], temp_12=df.loc[i,"temp_12"], humid_12=df.loc[i,"rel_humid_12"], month=df.loc[i,"month"])
         df.loc[i, "BUI"] = compute_BUI(DMC=df.loc[i, "DMC"], DC=df.loc[i,"DC"]) #Compute BUI
-    df = df.drop(columns=["year", "month", "temp_12", "rel_humid_12", "daylight", "heat_index"])
+    df = df.drop(columns=["year", "month", "temp_12", "rel_humid_12", "temp_avg_monthly"])
     return df
 
 def mean_aggregate(df, datatype:str, days:int, date_col="date"):
@@ -355,7 +356,7 @@ def process_synoptic_raw(station, dirpath, station_meta):
         data = parse_synoptic(station, dirpath)
         data = extract_features_synoptic(data, station=station, station_meta=station_meta)
         data.to_pickle(f"code/data/tmp/{station}_extracted_tmp.pkl")
-    features = [feature for feature in data.columns if feature != "date"]
+    features = [feature for feature in data.columns if feature not in ["date", "DC", "DMC", "BUI"]]
     for feature in tqdm(features, desc="Aggregating..."):
         for days in [3, 7, 15]:
             data = mean_aggregate(data, datatype=feature, days=days, date_col="date")

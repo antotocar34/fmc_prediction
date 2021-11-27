@@ -50,17 +50,19 @@ socc = pd.merge(socc, socc_station_list.loc[:,["Site", "nearest_stid", "station_
 #Add weather data
 dirpath = "code/data/clean_data/synoptic_weather"
 suffix = "_clean.pkl"
-def merge_weather_data(socc_data, dirpath, suffix):
+def merge_weather_data(dirpath, suffix):
     weather_stations = [station.strip(suffix) for station in os.listdir(dirpath)]
+    all_stations = []
     for station in weather_stations:
         station_df = pd.read_pickle(os.path.join(dirpath, f"{station}{suffix}"))
         station_df["stid"] = station
-        station_df.drop(columns=["DC_MEAN3", "DC_MEAN7", "DC_MEAN15", "DMC_MEAN3", "DMC_MEAN7", "DMC_MEAN15", "BUI_MEAN3", "BUI_MEAN7", "BUI_MEAN15"], inplace=True)
-        station_df["date"] = station["date"].astype("datetime64[ns]")
-        socc_data = pd.merge(socc_data, station_df, how="left", left_on=["Date", "nearest_stid"], right_on=["date", "stid"])
-    return socc_data
+        station_df["date"] = station_df["date"].astype("datetime64[ns]")
+        all_stations.append(station_df)
+    return pd.concat(all_stations, ignore_index=True)
 
-socc = merge_weather_data(socc, dirpath, suffix)
+all_stations = merge_weather_data(dirpath, suffix)
+socc = pd.merge(socc, all_stations, how="inner", left_on=["Date", "nearest_stid"], right_on=["date", "stid"])
+socc = socc.drop(columns=["date", "stid"])
 socc.to_pickle("code/data/processed_data/socc_synoptic_complete.pkl")
 socc.to_csv("code/data/processed_data/socc_synoptic_complete.csv")
 #%%
