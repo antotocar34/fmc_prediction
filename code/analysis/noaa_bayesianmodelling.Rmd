@@ -24,31 +24,75 @@ knitr::opts_knit$set(root.dir = PATH)
 ```
 
 ```{r}
-df = read.csv("data/clean_data/noaa/socc_noaa_complete.csv")
+setwd(PATH)
+df = read.csv("data/processed_data/socc_synoptic_complete_interacted.csv")
 
 ```
 
 ```{r}
-df_1<- subset(df, Fuel == 'Chamise', !names(df) %in% c("Site", "Fuel", "Date", "X", "AccSpeciesID"))
+#Group observations of same date and site together
+
+data = aggregate(.~Site + Fuel + Date, data=df, FUN=mean)
+
+#df<- subset(data, Fuel == 'Chamise', !names(data) %in% c("Site", "Fuel", "Date", "X", "AccSpeciesID", "nearest_stid", "Group"))
+
+df <- data[,-which(names(data) %in% c("Site", "Fuel", "Date", "X", "AccSpeciesID", "nearest_stid", "Group"))]
 
 set.seed(1000)
-
-trainRowNum <- createDataPartition(df_1$Percent, p = 0.8, list=F)
-trainData <- df_1[trainRowNum,]
-testData <- df_1[-trainRowNum,]
-xtrain <- trainData[,2:70]
-ytrain <- trainData[,1]
-xtest <- testData[,2:70]
-ytest <- testData[,1]
 ```
 
 ```{r}
-imputer <- preProcess(trainData, method='knnImpute')
-trainData <- predict(imputer, newdata=trainData)
-transformer <- preProcess(trainData, method="YeoJohnson")
-trainData <- predict(transformer, newdata=trainData)
-fitControl <- trainControl(method="cv", number=5, savePredictions = T)
-model <- train(Percent~.^2, data=trainData, method="glmnet", trControl = fitControl, preProcess=c("center", "scale"))
+trainRowNum <- createDataPartition(df$Percent, p = 0.8, list=F)
+trainData <- df[trainRowNum,]
+testData <- df[-trainRowNum,]
 
+xtrain <- trainData[, -which(names(trainData) == "Percent")]
+preproc <- preProcess(xtrain, method=c('knnImpute', 'YeoJohnson', 'center', 'scale', 'pca'))
+xtrain <- predict(preproc, newdata=xtrain)
+ytrain <- trainData[,which(names(trainData) == "Percent")]
+trainData <- cbind.data.frame(xtrain, ytrain)
+names(trainData)[names(trainData) == "ytrain"] <- "Percent"
+
+xtest <- testData[, -which(names(testData) == "Percent")]
+xtest <- predict(preproc, newdata=xtest)
+ytest <-  testData[,which(names(testData) == "Percent")]
+testData <- cbind.data.frame(xtest, ytest)
+names(testData)[names(testData) == "ytest"] <- "Percent"
+
+```
+
+```{r}
+
+#fitControl <- trainControl(method="cv", number=5, savePredictions = T)
+#model <- train(x=xtrain, y=ytrain, method="glmnet", trControl = fitControl)
+#glm_r2 <- max(aggregate(Rsquared~alpha, data=model$results, FUN=mean)$Rsquared)
+#glmpred <- predict(model, xtest)
+#glm_r2 <- 1 - (sum((glmpred-ytest)^2))/sum(((ytest-mean(ytest))^2))
+#glm_r2
+
+glm<- cv.glmnet(x = as.matrix(xtrain), y=as.matrix(ytrain))
+glmpred = predict(glm, as.matrix(xtest))
+glm_r2 <- 1 - sum((glmpred - ytest)^2)/sum((ytest-mean(ytest))^2)
+glm_r2
+```
+
+```{r}
+bayes.fit <- stan_glm(Percent~., data=trainData, refresh=0)
+bayes.kfold <- kfold(bayes.fit, K=5)
+```
+
+```{r}
+bayespp <- posterior_predict(bayes.fit, xtest)
+bayespred <- colSums(bayespp)/nrow(bayespp)
+bayes_r2 <- 1 - sum((bayespred - ytest)^2)/sum((ytrain-mean(ytrain))^2)
+bayes_r2
+```
+
+```{r}
+modelsel.fit <- modelSelection(y=ytrain, x=xtrain, priorCoef=zellnerprior(taustd=1), priorDelta=modelbbprior(1,1))
+
+mspred <- predict(modelsel.fit, xtest)
+modelsel_r2 <- 1 - sum((mspred[,1] - ytest)^2)/sum((ytest-mean(ytest))^2)
+modelsel_r2
 ```
 

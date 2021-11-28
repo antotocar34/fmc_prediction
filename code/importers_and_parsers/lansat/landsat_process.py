@@ -62,5 +62,5 @@ def main():
     assert data_output_path.exists()
     with open(data_output_path /  "LANSAT_7_ndvi_df.pkl",  'wb') as f:
         pickle.dump(df, f)
-
+        
 main()
