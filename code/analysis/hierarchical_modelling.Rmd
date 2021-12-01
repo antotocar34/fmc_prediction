@@ -1,0 +1,169 @@
+---
+title: "Heirarchical_model"
+author: "Clinton Leung"
+date: "29/11/2021"
+output: 
+  html_document:
+    toc:TRUE
+    toc_depth:3
+    number_sections:TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache=TRUE)
+library(tidyverse)
+library(plyr)
+library(ggplot2)
+library(glmnet)
+library(mombf)
+library(rstanarm)
+library(caret)
+library(rstan)
+library(lme4)
+library(blme)
+library(fixest)
+library(splitTools)
+PATH = "/home/clinton/Documents/statistical_inference/stat_proj/fmc_prediction/code"
+knitr::opts_knit$set(root.dir = PATH)
+```
+
+```{r}
+compute_r2 <- function(true, pred){
+  r2 <- 1 - sum((pred - true)^2)/sum((true - mean(true))^2)
+  return(r2)
+}
+
+print_colmeans <- function(frame){
+  for (col in names(frame)){
+    print(paste(col, "R2:", round(mean(frame[,col]), digits=3)))
+  }
+}
+
+process <- function(df, target, drop_cols, drop_fuels, group, method){
+  df <- df[,-which(names(df) %in% drop_cols)]
+  df <- subset(df, !(Fuel %in% drop_fuels))
+  df$Fuel <- as.factor(df$Fuel)
+  y <- df[,which(names(df) ==target)]
+  X = df[,which(names(df) != target)]
+  preproc <- preProcess(X, method=method)
+  X <- predict(preproc, newdata=X)
+  df <- cbind(y, X)
+  names(df)[names(df) == "y"] <- target
+  return(df)
+}
+
+get_formula <- function(df, shared_fx, exclude, select=c(),  type){
+  xs = paste(names(df)[-which(names(df) %in% exclude)], collapse = " + ")
+  shared = paste(shared_fx, collapse= " + ")
+  target = "Percent ~"
+  if (type=="fixest_RE"){
+    if ("all" %in% select){
+      select = xs
+    }
+    else{
+      select = paste(select, collapse="+")
+    }
+    if (is_empty(shared_fx)==TRUE){
+      formula <- as.formula(paste(target, "1 | Fuel[", select, "]", collapse = " "))
+    }
+    else{
+      formula <- as.formula(paste(target, shared, "| Fuel[", select, "]", collapse = " "))
+    }
+  }
+  else if(type=="fixest_FE"){
+    formula <- as.formula(paste(target, paste(c(shared, xs), collapse= "+"), "| Fuel", collapse = " "))
+  }
+  else if(type=="bayes"){
+    formula <- as.formula(paste(c(target, paste(c(shared, xs), collapse= "+")), collapse = " "))
+  }
+  else if(type=="lmer_RE"){
+    if ("all" %in% select){
+      formula <- as.formula(paste(target, paste(c(shared, xs), collapse= "+"), "+ (1 +", paste(xs, collapse="+"), "| Fuel)", collapse = " "))
+    }
+    else{
+    formula <- as.formula(paste(target, paste(c(shared, xs), collapse= "+"), "+ (1 +", paste(select, collapse="+"), "| Fuel)", collapse = " "))
+    }
+  }
+  else if(type=="lmer_FE"){
+    formula <- as.formula(paste(c(target, paste(c(shared, xs), collapse= "+"), "+ (1 | Fuel)"), collapse = " "))
+  }
+  return(formula)
+}
+cross_validate <- function(fun, target, formula, data, folds=10, use_posterior=FALSE){
+  folds <- create_folds(data$Fuel, k = folds, type="stratified")
+  residuals <- double()
+  y <- data[target]
+  fuels <- data["Fuel"]
+  all_fuels <- as.character(distinct(data, Fuel)[,1])
+  error_frame <- data.frame()
+  i = 0
+  for (fold in folds){
+    i = i + 1
+    fit <- fun(formula, data=data[fold,])
+    if (use_posterior==FALSE){
+      pred <- predict(fit, data[-fold,])
+    }
+    else{
+      pred <- posterior_predict(fit, data[-fold,])
+      pred <- colSums(pred)/nrow(pred)
+    }
+    results <- data.frame(y[-fold,], pred, fuels[-fold,])
+    
+    for (fuel in all_fuels){
+      y_true <- subset(results, fuels..fold...==fuel, select=y..fold...)
+      y_pred <- subset(results, fuels..fold...==fuel, select=pred)
+      r2 <- compute_r2(y_true[,1], y_pred[,1])
+      error_frame[i,fuel] <- r2
+    }
+    error_frame[i, "Total"] <- compute_r2(y[-fold,], pred)
+  }
+  return(error_frame)
+}
+
+
+
+```
+
+```{r}
+setwd(PATH)
+data = read.csv("data/processed_data/socc_synoptic_complete.csv")
+data <- data[,-which(names(data) %in% c("X", "AccSpeciesID", "nearest_stid", "Group"))]
+data = aggregate(.~Site + Fuel + Date, data=data, FUN=mean)
+```
+
+
+```{r}
+drop_cols = c("Site", "Date", "station_distance") #Fields to exclude from processing
+drop_fuels= c("Red Shank", "Manzanita, Eastwoods", "Brittlebrush") #Fuels to exclude from processing
+shared_fx = c()#c("station_distance", "station_elevation", "D") #Shared features by all.
+exclude_from_FE = c(c("Percent", "Fuel"), shared_fx) #All features except these will be used as random effects
+method=c('knnImpute', 'YeoJohnson', 'center', 'scale') #preprocessing pipeline
+select = c("precip_MEAN15",  "solar_rad_max_MEAN7", "DC") #For LMER Random effects, only these features will be used. If "all" is passed, then all available features will be used. 
+
+inds <- partition(data$Fuel, p=c(train=0.8, test=0.2))
+train <- data[inds$train,]
+test <- data[inds$test,]
+
+train <- process(train, target="Percent", drop_cols=drop_cols, drop_fuels=drop_fuels, group="Fuel", method=method)
+test <- process(test, target="Percent", drop_cols=drop_cols, drop_fuels=drop_fuels, group="Fuel", method=method)
+```
+```{r}
+FE_formula <- get_formula(train, exclude=exclude_from_FE, shared_fx=shared_fx, type="fixest_FE")
+RE_formula <- get_formula(train, exclude=exclude_from_FE, shared_fx=shared_fx, select=select, type="fixest_RE")
+bayes_formula <- get_formula(train, exclude=exclude_from_FE, shared_fx=shared_fx, type="bayes")
+lmerFE_formula <- get_formula(train, exclude=exclude_from_FE, shared_fx=shared_fx, type="lmer_FE")
+lmerRE_formula <- get_formula(train, exclude=exclude_from_FE, shared_fx=shared_fx, select=select, type="lmer_RE")
+```
+```{r message=FALSE}
+feols.re = cross_validate(feols, "Percent", formula=RE_formula, train)
+feols.fe = cross_validate(feols, "Percent", formula=FE_formula, train)
+feglm.re = cross_validate(feglm, "Percent", formula=RE_formula, train)
+feglm.fe = cross_validate(feglm, "Percent", formula=FE_formula, train)
+#bayesres = cross_validate(stan_glm, "Percent", formula=bayes_formula, data=train, use_posterior=T)
+olsres = cross_validate(lm, "Percent", formula=as.formula("Percent~."), data = train)
+lmer.fe = cross_validate(lmer, "Percent", formula=lmerFE_formula, data=train, folds=10)
+lmer.re = cross_validate(lmer, "Percent", formula=lmerRE_formula, data=train, folds=10)
+```
+
+Run with interactions
+run mombf before to choose best vars. 
