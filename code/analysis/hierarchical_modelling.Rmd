@@ -52,22 +52,23 @@ process <- function(df, target, drop_cols, drop_fuels, group, method){
   return(df)
 }
 
-get_formula <- function(df, shared_fx, exclude, select=c(),  type){
-  xs = paste(names(df)[-which(names(df) %in% exclude)], collapse = " + ")
+get_formula <- function(df, include, shared_fx, exclude, select=c(),  type){
+  xs = paste(include[-which(include %in% exclude)], collapse = " + ")
   shared = paste(shared_fx, collapse= " + ")
   target = "Percent ~"
+  if ("all" %in% select){
+  select = xs
+  }
+  else{
+    select = paste(select, collapse="+")
+    xs = paste(include[-which(include %in% c(select,exclude))], collapse = " + ")
+  }
   if (type=="fixest_RE"){
-    if ("all" %in% select){
-      select = xs
-    }
-    else{
-      select = paste(select, collapse="+")
-    }
-    if (is_empty(shared_fx)==TRUE){
+    if (is_empty(paste(c(shared, xs), collapse="+"))==TRUE){
       formula <- as.formula(paste(target, "1 | Fuel[", select, "]", collapse = " "))
     }
     else{
-      formula <- as.formula(paste(target, shared, "| Fuel[", select, "]", collapse = " "))
+      formula <- as.formula(paste(target, paste(c(shared, xs), collapse= "+"),  "| Fuel[", select, "]", collapse = " "))
     }
   }
   else if(type=="fixest_FE"){
@@ -77,12 +78,8 @@ get_formula <- function(df, shared_fx, exclude, select=c(),  type){
     formula <- as.formula(paste(c(target, paste(c(shared, xs), collapse= "+")), collapse = " "))
   }
   else if(type=="lmer_RE"){
-    if ("all" %in% select){
-      formula <- as.formula(paste(target, paste(c(shared, xs), collapse= "+"), "+ (1 +", paste(xs, collapse="+"), "| Fuel)", collapse = " "))
-    }
-    else{
     formula <- as.formula(paste(target, paste(c(shared, xs), collapse= "+"), "+ (1 +", paste(select, collapse="+"), "| Fuel)", collapse = " "))
-    }
+    
   }
   else if(type=="lmer_FE"){
     formula <- as.formula(paste(c(target, paste(c(shared, xs), collapse= "+"), "+ (1 | Fuel)"), collapse = " "))
@@ -133,12 +130,7 @@ data = aggregate(.~Site + Fuel + Date, data=data, FUN=mean)
 
 
 ```{r}
-drop_cols = c("Site", "Date", "station_distance") #Fields to exclude from processing
-drop_fuels= c("Red Shank", "Manzanita, Eastwoods", "Brittlebrush") #Fuels to exclude from processing
-shared_fx = c()#c("station_distance", "station_elevation", "D") #Shared features by all.
-exclude_from_FE = c(c("Percent", "Fuel"), shared_fx) #All features except these will be used as random effects
 method=c('knnImpute', 'YeoJohnson', 'center', 'scale') #preprocessing pipeline
-select = c("precip_MEAN15",  "solar_rad_max_MEAN7", "DC") #For LMER Random effects, only these features will be used. If "all" is passed, then all available features will be used. 
 
 inds <- partition(data$Fuel, p=c(train=0.8, test=0.2))
 train <- data[inds$train,]
@@ -148,12 +140,27 @@ train <- process(train, target="Percent", drop_cols=drop_cols, drop_fuels=drop_f
 test <- process(test, target="Percent", drop_cols=drop_cols, drop_fuels=drop_fuels, group="Fuel", method=method)
 ```
 ```{r}
-FE_formula <- get_formula(train, exclude=exclude_from_FE, shared_fx=shared_fx, type="fixest_FE")
-RE_formula <- get_formula(train, exclude=exclude_from_FE, shared_fx=shared_fx, select=select, type="fixest_RE")
-bayes_formula <- get_formula(train, exclude=exclude_from_FE, shared_fx=shared_fx, type="bayes")
-lmerFE_formula <- get_formula(train, exclude=exclude_from_FE, shared_fx=shared_fx, type="lmer_FE")
-lmerRE_formula <- get_formula(train, exclude=exclude_from_FE, shared_fx=shared_fx, select=select, type="lmer_RE")
+drop_cols = c("Site", "Date", "station_distance") #Fields to exclude from processing
+drop_fuels= c("Red Shank", "Manzanita, Eastwoods", "Brittlebrush") #Fuels to exclude from processing
+shared_fx = c()#c("station_distance", "station_elevation", "D") #Shared features by all.
+exclude_from_FE = c(c("Percent", "Fuel"), shared_fx) #All features except these will be used as random effects
+#select = c('station_elevation','solar_rad_max','precip','DC','DMC','solar_rad_max_MEAN3','rel_humid_min_MEAN15','rel_humid_MEAN3','wind_speed_max_MEAN3','temp_max_MEAN7','temp_avg_MEAN7','evap_pot_MEAN3') 
+select=c("DMC") #For LMER Random effects, only these features will be used. If "all" is passed, then all available features will be used. 
+include=names(train)
+
+FE_formula <- get_formula(train, include=vars.bms, exclude=exclude_from_FE, shared_fx=shared_fx, type="fixest_FE")
+RE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, select=select, type="fixest_RE")
+bayes_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, type="bayes")
+lmerFE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, type="lmer_FE")
+lmerRE_formula <- get_formula(train, include=vars.bms, exclude=exclude_from_FE, shared_fx=shared_fx, select=select, type="lmer_RE")
 ```
+
+```{r}
+msfit <- modelSelection(Percent ~ . - Fuel, data=train, priorCoef=zellnerprior(taustd=1), priorDelta=modelbbprior(1,1))
+vars.bms <- colnames(train)[c(2,3,5,7,18,19,21,32,33,36,46,52,57)]
+```
+
+
 ```{r message=FALSE}
 feols.re = cross_validate(feols, "Percent", formula=RE_formula, train)
 feols.fe = cross_validate(feols, "Percent", formula=FE_formula, train)
