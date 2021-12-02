@@ -123,7 +123,7 @@ cross_validate <- function(fun, target, formula, data, folds=10, use_posterior=F
 
 ```{r}
 setwd(PATH)
-data = read.csv("data/processed_data/socc_synoptic_complete.csv")
+data = read.csv("data/processed_data/socc_total_interacted.csv")
 data <- data[,-which(names(data) %in% c("X", "AccSpeciesID", "nearest_stid", "Group"))]
 data = aggregate(.~Site + Fuel + Date, data=data, FUN=mean)
 ```
