@@ -3,6 +3,7 @@ from IPython.core.debugger import set_trace
 # %%
 import os
 import pickle
+import time
 from typing import List, Dict, Tuple
 import pathlib
 
@@ -14,8 +15,11 @@ from datetime import datetime
 
 ee.Authenticate()
 ee.Initialize()
+print("Google Earth Engine Authentication Successful!")
 
+EXCEPTIONS = (KeyboardInterrupt, InterruptedError, ee.ee_exception.EEException)
 STATS_PROJ = os.getenv("STATS_PROJ")
+assert STATS_PROJ, "STATS_PROJ environment variable not set."
 # %%
 def get_data() -> pd.DataFrame:
     with open(
@@ -44,56 +48,84 @@ coords: List[Tuple[int, int]] = list(
 )
 
 
+PARAMS = {
+    "sensor": "LC8",
+    "tiers": ["T1", "T2"],
+    "start": min_date,
+    "end": max_date,
+    "radius": 10000,
+}
+
 # Extract a Landsat 7 time-series for a 500m radius circular buffer around
 # a location in Yucatan
-def main():
+def main() -> bool:
     big_list = []
 
     try:
-        data_path = pathlib.Path(f"{STATS_PROJ}/code/data/raw_data/lansat_7_T1").resolve()
-        list_of_files = list(data_path.rglob("*.pkl"))
-        assert list_of_files
+        print("Trying to find existing pkl files")
+        data_path = pathlib.Path(
+            f"{STATS_PROJ}/code/data/raw_data/lansat"
+        ).resolve()
+        assert data_path.exists()
+        list_of_files = list(data_path.rglob(f"sensor{PARAMS['sensor']}*radius{PARAMS['radius']}*partial.pkl"))
+        assert list_of_files # Check if there is any .pkl files.
+        print("Found the following:", *list(map(lambda o: o.name, list_of_files)), sep="\n")
+
         most_recent_pickle_file = max(list_of_files, key=os.path.getctime)
+        print(f"Loading {most_recent_pickle_file.name}")
         with open(most_recent_pickle_file, "rb") as f:
-            big_list, j = pickle.load(f)
+            big_list = pickle.load(f)
         print(
-            f"Picking up from where we left off! {j} out of {len(coords)} done."
+            f"Picking up from where we left off! {len(big_list)} out of {len(coords)} done."
         )
     except AssertionError:
-        j = 0
+        print("No existing files found")
 
     try:
-        coords_to_iterate = coords[j - 1 :] if j else coords
-        for i, (lat, lon) in enumerate(coords_to_iterate):
-            LE7_dict_list = ts_extract(
-                lon=lon,
-                lat=lat,
-                sensor="LE7",
-                start=min_date,
-                end=max_date,
-                radius=1000,
-            )
-            count = i + j
-            obj = {(lat, lon): LE7_dict_list}
+        # 
+        j = len(big_list)
+        coords_to_iterate = coords[j:] if j else coords
+        for (lat, lon) in coords_to_iterate:
+            dict_list = ts_extract(lon=lon, lat=lat, **PARAMS)
+            obj = {(lat, lon): dict_list}
             if obj not in big_list:
                 big_list.append(obj)
                 print(
-                    f"Just finished {(lat, lon)}, {count+1} coordinates done; {len(coords) - count+1} left to go!"
+                    f"Finished {(lat, lon)}, {len(big_list)} coordinates done; {len(coords) - len(big_list)} left to go!"
                 )
-    except:
+
         now = (
             datetime.now()
-            .replace(microsecond=0, second=0, minute=0)
             .isoformat()
+            .split("T")[0]
         )
-        with open(f"{STATS_PROJ}/code/data/raw_data/lansat_7_T1/LE7_T1_coords__{now}.pkl", "wb") as f:
-            if "count" in locals():
-                assert "count" in locals()
-                pickle.dump((big_list, count), f)  # type: ignore
-            else:
-                pickle.dump((big_list, 0), f)
-    print("All done!")
+        name = f"sensor{PARAMS['sensor']}_radius{PARAMS['radius']}_{now}_complete.pkl"
+        print(f"Complete Finished! Saving the pickle file as: \n\t{name}")
+        with open(
+            f"{STATS_PROJ}/code/data/raw_data/lansat/{name}",
+            "wb",
+        ) as f:
+            pickle.dump(big_list, f)
+            return True
+
+    except EXCEPTIONS as e:
+        print(f"The following exceptption occured:\n {e}")
+        print("saving your progress.")
+        now = (
+            datetime.now()
+            .isoformat()
+            .split("T")[0]
+        )
+        with open(
+            f"{STATS_PROJ}/code/data/raw_data/lansat/sensor{PARAMS['sensor']}_radius{PARAMS['radius']}_{now}_partial.pkl",
+            "wb",
+        ) as f:
+            pickle.dump(big_list, f)  # type: ignore
+        return False
 
 
 if __name__ == "__main__":
-    main()
+    bool = False
+    while not bool:
+        bool = main()
+        time.sleep(10)
