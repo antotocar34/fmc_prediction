@@ -171,7 +171,9 @@ bayes_formula <- get_formula(train, include=include, exclude=exclude_from_FE, sh
 lmerFE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, type="lmer_FE")
 lmerRE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, select=select, type="lmer_RE")
 ```
-
+```{r}
+rf <- train(Percent ~ . -Fuel, data=train, method="rf")
+```
 
 ```{r message=FALSE}
 feols.re = cross_validate(feols, "Percent", formula=RE_formula, train)
@@ -184,9 +186,5 @@ lmer.fe = cross_validate(lmer, "Percent", formula=lmerFE_formula, data=train, fo
 lmer.re = cross_validate(lmer, "Percent", formula=lmerRE_formula, data=train, folds=10)
 ```
 
-```{r}
-#rf <- train(Percent ~ . -Fuel, data=train, method="rf")
-```
-
-hausman test
-table/figures
+Run with interactions
+run mombf before to choose best vars. 
