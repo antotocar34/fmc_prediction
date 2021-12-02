@@ -48,19 +48,42 @@ def calculate_ndvi(df):
     df["NDVI"] = (df["B4"] - df["B3"]) / (df["B4"] + df["B3"])
     return df
 
+def calculate_surface_temperature(df):
+    pass
+    return df
+
+def calculate_variables(df):
+    df = calculate_ndvi(df)
+    df = calculate_surface_temperature(df)
+    return df
+
+def parse_name(string) -> Tuple[str, str]:
+    """
+    sensorLE7_radius10000_2021-11-30T10:00:00.pkl 
+    ->
+    (LE7, radius)
+    """
+    sensor = string.split("_")[0].split("sensor")[-1]
+    radius = string.split("_")[1].split("radius")[-1]
+    return (sensor, radius)
 
 def main():
-    data_path = Path(f"{STATS_PROJ}/code/data/raw_data/lansat_7_T1/").resolve()
-    latest_pkl_file = max(data_path.rglob("*.pkl"), key=os.path.getctime)
+    data_path = Path(f"{STATS_PROJ}/code/data/raw_data/lansat/").resolve()
+    assert data_path.exists()
+    assert list(data_path.rglob("*.pkl")), "No pickle files found"
+    latest_pkl_file = max(data_path.rglob("*LE7*complete.pkl"), key=os.path.getctime)
+    print(f"Processing file {latest_pkl_file.name}")
 
     with open(latest_pkl_file, "rb") as f:
-        big_list, _ = pickle.load(f)
+        big_list = pickle.load(f)
 
     df = parse_big_list(big_list)
 
     data_output_path = Path(f"{STATS_PROJ}/code/data/processed_data/")
     assert data_output_path.exists()
-    with open(data_output_path /  "LANSAT_7_ndvi_df.pkl",  'wb') as f:
+    sensor, radius = parse_name(latest_pkl_file.name)
+    with open(data_output_path /  f"sensor{sensor}_radius{radius}_df.pkl",  'wb') as f:
+        df = calculate_variables(df)
         pickle.dump(df, f)
         
 main()
