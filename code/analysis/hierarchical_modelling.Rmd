@@ -26,6 +26,8 @@ library(splitTools)
 library(arm)
 library(merTools)
 library(stargazer)
+library(lmerTest)
+library(sjstats)
 PATH = "/home/clinton/Documents/statistical_inference/stat_proj/fmc_prediction/code"
 knitr::opts_knit$set(root.dir = PATH)
 ```
@@ -42,18 +44,6 @@ colmeans <- function(frame){
   }
 }
 
-process <- function(df, target, drop_cols, drop_fuels, group, method){
-  df <- df[,-which(names(df) %in% drop_cols)]
-  df <- subset(df, !(Fuel %in% drop_fuels))
-  df$Fuel <- as.factor(df$Fuel)
-  y <- df[,which(names(df) ==target)]
-  X = df[,which(names(df) != target)]
-  preproc <- preProcess(X, method=method)
-  X <- predict(preproc, newdata=X)
-  df <- cbind(y, X)
-  names(df)[names(df) == "y"] <- target
-  return(df)
-}
 
 get_formula <- function(df, include, shared_fx, exclude, select=c(),  type){
   xs = paste(include[-which(include %in% exclude)], collapse = " + ")
@@ -133,16 +123,35 @@ data = aggregate(.~Site + Fuel + Date, data=data, FUN=mean)
 
 
 ```{r}
+set.seed(1000)
 drop_cols = c("Site", "Date", "station_distance") #Fields to exclude from processing
 drop_fuels= c("Red Shank", "Manzanita, Eastwoods", "Brittlebrush", "chamise, old growth") #Fuels to exclude from processing
-method=c('knnImpute')#, 'YeoJohnson', 'center', 'scale') #preprocessing pipeline
 
 inds <- partition(data$Fuel, p=c(train=0.8, test=0.2))
 train <- data[inds$train,]
 test <- data[inds$test,]
 
-train <- process(train, target="Percent", drop_cols=drop_cols, drop_fuels=drop_fuels, group="Fuel", method=method)
-test <- process(test, target="Percent", drop_cols=drop_cols, drop_fuels=drop_fuels, group="Fuel", method=method)
+target <- "Percent"
+
+train <- train[,-which(names(train) %in% drop_cols)]
+train <- subset(train, !(Fuel %in% drop_fuels))
+train$Fuel <- as.factor(train$Fuel)
+y <- train[,which(names(train) ==target)]
+X = train[,which(names(train) != target)]
+preproc <- preProcess(X, method=c('knnImpute', 'pca')) #Preprocessing pipeline
+X <- predict(preproc, newdata=X)
+train <- cbind(y, X)
+names(train)[names(train) == "y"] <- target
+
+test <- test[,-which(names(test) %in% drop_cols)]
+test <- subset(test, !(Fuel %in% drop_fuels))
+test$Fuel <- as.factor(test$Fuel)
+y <- test[,which(names(test) ==target)]
+X = test[,which(names(test) != target)]
+X <- predict(preproc, newdata=X)
+test <- cbind(y, X)
+names(test)[names(test) == "y"] <- target
+
 ```
 
 ```{r, eval=FALSE, echo=FALSE}
@@ -162,7 +171,7 @@ top_vars
 shared_fx = c()#c("station_distance", "station_elevation", "D") #Shared features by all.
 exclude_from_FE = c(c("Percent", "Fuel"), shared_fx) #All features except these will be used as random effects
 #select = c('station_elevation','solar_rad_max','precip','DC','DMC','solar_rad_max_MEAN3','rel_humid_min_MEAN15','rel_humid_MEAN3','wind_speed_max_MEAN3','temp_max_MEAN7','temp_avg_MEAN7','evap_pot_MEAN3') 
-select=c("DMC", "ANDVI", "precip_MEAN15") #For LMER Random effects, only these features will be used. If "all" is passed, then all available features will be used. 
+select="all" #For LMER Random effects, only these features will be used. If "all" is passed, then all available features will be used. 
 include=names(train)
 
 FE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, type="fixest_FE")
@@ -170,6 +179,10 @@ RE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, share
 bayes_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, type="bayes")
 lmerFE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, type="lmer_FE")
 lmerRE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, select=select, type="lmer_RE")
+```
+```{r}
+lmerRE_formula2 <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, select=c("PC3", "PC5", "PC6", "PC8", "PC9", "PC10", "PC11", "PC14", "PC15", "PC16", "PC17", "PC18", "PC19", "PC20", "PC21", "PC22"), type="lmer_RE")
+lmer.fitre_2 <- lmer(formula=lmerRE_formula2, data=train)
 ```
 
 
@@ -187,24 +200,48 @@ lmer.re = cross_validate(lmer, "Percent", formula=lmerRE_formula, data=train, fo
 ```
 
 ```{r}
-lmer.fit <- lmer(formula=lmerRE_formula, data=train)
-pred <- predictInterval(lmer.fit, newdata=test)
+ols.fitunpooled <- lm(Percent~ ., data=train)
+lmer.fitfe <- lmer(formula=lmerFE_formula, data=train)
+lmer.fitre <- lmer(formula=lmerRE_formula, data=train)
 ```
+```{r}
+modelnames <- c("OLS", "lmer.fe", "lmer.re")
+
+olspred <- predict(ols.fitunpooled, test, interval="confidence")
+lmerfepred <- predictInterval(lmer.fitfe, newdata=test)
+lmerrepred <- predictInterval(lmer.fitre, newdata=test)
+
+```
+
+```{r}
+icc(lmer.fitfe)
+icc(lmer.fitre)
+ranova(lmer.fitre)
+```
+
+
 ```{r}
 #GET R2 for each group, pass just the prediction column as predictions
 get_group_stat <- function(predictions, testdata){
-  df <- cbind(predictions, testdata)
-  results <- c()
-  fuels <- as.character(distinct(df, Fuel)[,1])
+  fuels <- as.character(distinct(testdata, Fuel)[,1])
+  df <- cbind(predictions[,1], testdata)
+  results = c()
   for (fuel in fuels){
     set <- subset(df, Fuel==fuel, select=colnames(df))
     ypred = set[,1]
     ytrue = set[,"Percent"]
     results = c(results, compute_r2(ytrue, ypred))
   }
-  return(data.frame(fuels, results))
+  results = data.frame(fuels, results)
+  return(results)
 }
-groupstats <- get_group_stat(pred[,1], test)
+ols.results <- get_group_stat(olspred, test)
+lmerfe.results <- get_group_stat(lmerfepred, test)
+lmerre.results <- get_group_stat(lmerrepred, test)
+
+all_results <- merge(ols.results, lmerfe.results, by="fuels")
+all_results <- merge(all_results, lmerre.results, by="fuels")
+names(all_results) <- c("Fuels", modelnames)
 
 ```
 ```{r}
@@ -220,17 +257,17 @@ plot_lmer_pred <- function(data, title){
     ggtitle(paste0("Predictions for ", title)) + theme_classic()
   return(plot)
 }
-plot_all_species <- function(pred, test){
+plot_all_species <- function(pred, test, suffix){
   fitted <- cbind(pred, test)
   fuels <- as.character(distinct(fitted, Fuel)[,1])
   for (fuel in fuels){
     fitted_fuel <- subset(fitted, Fuel==fuel, select=c("Percent", "Fuel", "fit", "upr", "lwr"))
     plot <- plot_lmer_pred(fitted_fuel, fuel)
-    ggsave(plot, file=paste0("analysis/results/plot_", fuel, ".png"), width=14, height=10, units="cm")
+    ggsave(plot, file=paste0("analysis/results/pca/plot_", fuel, suffix, ".png"), width=14, height=10, units="cm")
   }
 }
 
-plot_all_species(pred, test)
+plot_all_species(lmerrepred, test, "_lmerre")
 #plot = plot_lmer_pred(chamisefitted, "chamise")
 #plot
 ```
