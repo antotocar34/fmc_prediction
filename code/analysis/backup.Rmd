@@ -71,8 +71,7 @@ get_formula <- function(df, include, shared_fx, exclude, select=c(),  type){
     formula <- as.formula(paste(c(target, paste(c(shared, xs), collapse= "+")), collapse = " "))
   }
   else if(type=="lmer_RE"){
-    fe <- paste(include[-which(include %in% c(exclude, select))], collapse = " + ")
-    formula <- as.formula(paste(target, paste(c(shared, fe), collapse= "+"), "+ (1 +", paste(select, collapse="+"), "| Fuel)", collapse = " "))
+    formula <- as.formula(paste(target, paste(c(shared, xs), collapse= "+"), "+ (1 +", paste(select, collapse="+"), "| Fuel)", collapse = " "))
     
   }
   else if(type=="lmer_FE"){
@@ -123,8 +122,6 @@ data = aggregate(.~Site + Fuel + Date, data=data, FUN=mean)
 ```
 
 
-
-
 ```{r}
 set.seed(1000)
 drop_cols = c("Site", "Date", "station_distance") #Fields to exclude from processing
@@ -141,7 +138,7 @@ train <- subset(train, !(Fuel %in% drop_fuels))
 train$Fuel <- as.factor(train$Fuel)
 y <- train[,which(names(train) ==target)]
 X = train[,which(names(train) != target)]
-preproc <- preProcess(X, method=c('knnImpute', 'center', 'scale', 'pca')) #Preprocessing pipeline
+preproc <- preProcess(X, method=c('knnImpute', 'pca')) #Preprocessing pipeline
 X <- predict(preproc, newdata=X)
 train <- cbind(y, X)
 names(train)[names(train) == "y"] <- target
@@ -174,7 +171,7 @@ top_vars
 shared_fx = c()#c("station_distance", "station_elevation", "D") #Shared features by all.
 exclude_from_FE = c(c("Percent", "Fuel"), shared_fx) #All features except these will be used as random effects
 #select = c('station_elevation','solar_rad_max','precip','DC','DMC','solar_rad_max_MEAN3','rel_humid_min_MEAN15','rel_humid_MEAN3','wind_speed_max_MEAN3','temp_max_MEAN7','temp_avg_MEAN7','evap_pot_MEAN3') 
-select=c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6") #For LMER Random effects, only these features will be used. If "all" is passed, then all available features will be used. 
+select="all" #For LMER Random effects, only these features will be used. If "all" is passed, then all available features will be used. 
 include=names(train)
 
 FE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, type="fixest_FE")
@@ -183,8 +180,8 @@ bayes_formula <- get_formula(train, include=include, exclude=exclude_from_FE, sh
 lmerFE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, type="lmer_FE")
 lmerRE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, select=select, type="lmer_RE")
 ```
-```{r, echo=FALSE, eval=FALSE}
-lmerRE_formula2 <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, select=c("PC1", "PC3", "PC5", "PC6"), type="lmer_RE")
+```{r}
+lmerRE_formula2 <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, select=c("PC3", "PC5", "PC6", "PC8", "PC9", "PC10", "PC11", "PC14", "PC15", "PC16", "PC17", "PC18", "PC19", "PC20", "PC21", "PC22"), type="lmer_RE")
 lmer.fitre_2 <- lmer(formula=lmerRE_formula2, data=train)
 ```
 
@@ -208,12 +205,11 @@ lmer.fitfe <- lmer(formula=lmerFE_formula, data=train)
 lmer.fitre <- lmer(formula=lmerRE_formula, data=train)
 ```
 ```{r}
-modelnames <- c("OLS", "Intercept Only", "Intercept + Slope", "Intercept + Slope 2")
+modelnames <- c("OLS", "lmer.fe", "lmer.re")
 
 olspred <- predict(ols.fitunpooled, test, interval="confidence")
 lmerfepred <- predictInterval(lmer.fitfe, newdata=test)
 lmerrepred <- predictInterval(lmer.fitre, newdata=test)
-lmerre2pred <- predictInterval(lmer.fitre_2, newdata=test)
 
 ```
 
@@ -242,28 +238,12 @@ get_group_stat <- function(predictions, testdata){
 ols.results <- get_group_stat(olspred, test)
 lmerfe.results <- get_group_stat(lmerfepred, test)
 lmerre.results <- get_group_stat(lmerrepred, test)
-lmerre2.results <- get_group_stat(lmerre2pred, test)
 
 all_results <- merge(ols.results, lmerfe.results, by="fuels")
 all_results <- merge(all_results, lmerre.results, by="fuels")
-all_results <- merge(all_results, lmerre2.results, by="fuels")
 names(all_results) <- c("Fuels", modelnames)
 
 ```
-```{r}
-all_results$Fuels <- as.factor(all_results$Fuels)
-melt_res <- melt(all_results, id="Fuels")
-r2_plot <- ggplot(mapping=aes(x=variable, y = value, color=Fuels, group=Fuels), data=melt_res) +
-  geom_point() +
-  geom_line() + ylab("R2") + 
-  ggtitle("R2 for predictions using PCA") + theme_classic()
-r2_plot
-
-ggsave(r2_plot, file=paste0("analysis/results/pca/PCA_R2.png"), width=14, height=10, units="cm")
-
-```
-
-
 ```{r}
 #plot a lmer pred with PI values. can use ols predict(model, data, interval="confidence)
 #pass result from either that or predictInterval(lmer.fit, data) to this function
@@ -277,25 +257,17 @@ plot_lmer_pred <- function(data, title){
     ggtitle(paste0("Predictions for ", title)) + theme_classic()
   return(plot)
 }
-plot_all_species <- function(pred, test, prefix){
+plot_all_species <- function(pred, test, suffix){
   fitted <- cbind(pred, test)
   fuels <- as.character(distinct(fitted, Fuel)[,1])
   for (fuel in fuels){
     fitted_fuel <- subset(fitted, Fuel==fuel, select=c("Percent", "Fuel", "fit", "upr", "lwr"))
     plot <- plot_lmer_pred(fitted_fuel, fuel)
-    ggsave(plot, file=paste0("analysis/results/pca/", prefix, fuel, ".png"), width=14, height=10, units="cm")
+    ggsave(plot, file=paste0("analysis/results/pca/plot_", fuel, suffix, ".png"), width=14, height=10, units="cm")
   }
 }
-plot_all_species(olspred, test, "olspred_")
-plot_all_species(lmerfepred, test, "lmerfe_")
-plot_all_species(lmerrepred, test, "lmerre_")
-plot_all_species(lmerre2pred, test, "lmerre2_")
-stargazer(ols.fitunpooled, out="analysis/results/pca/ols_pca.tex")
-class(lmer.fitre) <- "lmerMod"
-stargazer(lmer.fitfe, out="analysis/results/pca/lmerfe_pca.tex")
-class(lmer.fitre) <- "lmerMod"
-stargazer(lmer.fitre, out="analysis/results/pca/lmerre_pca.tex")
-class(lmer.fitre_2) <- "lmerMod"
-stargazer(lmer.fitre_2, out="analysis/results/pca/lmerre2_pca.tex")
-stargazer(all_results, out="analysis/results/pca/r2_results_pca.tex")
+
+plot_all_species(lmerrepred, test, "_lmerre")
+#plot = plot_lmer_pred(chamisefitted, "chamise")
+#plot
 ```
