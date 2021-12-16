@@ -1,0 +1,60 @@
+
+```{r}
+library(tidyverse)
+library(plyr)
+library(stargazer)
+library(factoextra)
+PATH = "/home/clinton/Documents/statistical_inference/stat_proj/fmc_prediction/code"
+setwd(PATH)
+data = read.csv("data/processed_data/socc_ndvi_postprocess.csv")
+data <- data[,-which(names(data) %in% c("X", "AccSpeciesID", "nearest_stid", "Group"))]
+data = aggregate(.~Site + Fuel + Date, data=data, FUN=mean)
+```
+
+```{r}
+set.seed(1000)
+drop_cols = c("Site", "Date", "station_distance", "Percent") #Fields to exclude from processing
+drop_fuels= c("Red Shank", "Manzanita, Eastwoods", "Brittlebrush", "chamise, old growth") #Fuels to exclude from processing
+
+data <- subset(data, !(Fuel %in% drop_fuels))
+fuels <- as.character((distinct(data, Fuel)[,1]))
+data <- data[,-which(names(data) %in% drop_cols)]
+X <- data[,-which(names(data) =="Fuel")]
+X <- scale(X)
+```
+
+```{r}
+decomp <- function(data, ncomps, nvars){
+  Xpca <- prcomp(data)
+  results = list()
+  names = c()
+  for (i in 1:ncomps){
+    Xhat = Xpca$x[,i] %*% t(Xpca$rotation[,i])
+    comp <- abs(Xhat[1,])
+    comp <- comp[order(comp, decreasing=TRUE)]
+    results[i] <- data.frame(names(comp[1:nvars]))
+    names <- c(names, paste0("PC", i))
+  }
+  results = data.frame(results)
+  colnames(results) <- names
+  return(results)
+}
+
+pca <- prcomp(X)
+scree <- fviz_eig(pca)
+scree
+```
+```{r}
+summary(pca)
+xpca <- as.data.frame(summary(pca)$importance)
+deco <- decomp(data=X, ncomps=7, nvars=20)
+stargazer(t(xpca[,1:22]), out="pca_summary.tex", summary = F)
+stargazer(t(deco), out="pca_components.tex")
+```
+```{r}
+subdata <- subset(data, Fuel == fuels[4], select = which(names(data)!="Fuel"))
+subdata <- scale(subdata)
+summary(prcomp(subdata))
+subdeco <- decomp(data=subdata, ncomps=13, nvars=25)
+
+```

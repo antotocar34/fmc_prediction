@@ -28,6 +28,7 @@ library(stargazer)
 library(lmerTest)
 library(sjstats)
 library(gridExtra)
+library(irr)
 PATH = "/home/clinton/Documents/statistical_inference/stat_proj/fmc_prediction/code"
 ```
 
@@ -173,7 +174,7 @@ ran_ef = varying_slope[-hc] #Random Effects
 FE_formula <- get_formula(train, fix_ef=fix_ef, ran_ef=ran_ef, type="fixest_FE")
 RE_formula <- get_formula(train, fix_ef=fix_ef, ran_ef=ran_ef, type="fixest_RE")
 lmerFE_formula <- get_formula(train, fix_ef=fix_ef, ran_ef=ran_ef, type="lmer_FE")
-lmerRE_formula <- get_formula(train, fix_ef=all_vars, ran_ef=ran_ef, type="lmer_RE") #Altered for BMS
+lmerRE_formula <- get_formula(train, fix_ef=PCA_fix_ef, ran_ef=PCA_fix_ef, type="lmer_RE")
 lmerRE_formula2 <- get_formula(train, fix_ef=PCA_fix_ef, ran_ef=PCA_ran_ef, type="lmer_RE")
 lmerRE_formula3 <- get_formula(train, fix_ef=PCA_fix_ef, ran_ef=PCA_ran_ef2, type="lmer_RE")
 OLS_formula <- get_formula(train, fix_ef=fix_ef, ran_ef=ran_ef, type="OLS")
@@ -345,9 +346,10 @@ plot_grid_pred <- function(predictions, test, fuel, modelnames, colors, cols=2){
 }
 ```
 ```{r}
-predictions <- list(olspooledpred, olsunpooledpred, lmerrepred, lmerre3pred)
+models <- c("PCA Min", "BMS 11 Var Slope")
+predictions <- list(pca_pc_all, bms_var_slope_11)
 colors <- c("green", "orange", "turquoise2", "purple")
-grid <- plot_grid_pred(predictions, test, "sage, black", modelnames, colors)
+grid <- plot_grid_pred(predictions, pca_test, "buckwheat, eastern mojave", models, colors, cols=1)
 ```
 
 ```{r}
@@ -377,10 +379,10 @@ stargazer(ols.unpooled, out=paste0("analysis/results/", modeltype, "/olsunpooled
 class(lmer.fitfe) <- "lmerMod"
 stargazer(lmer.fitfe, out=paste0("analysis/results/", modeltype, "/lmerfe_", modeltype, ".tex"))
 class(lmer.fitre) <- "lmerMod"
-stargazer(lmer.fitre, out=paste0("analysis/results/", modeltype, "/lmer_pcaall_", modeltype, ".tex"))
+stargazer(lmer.fitre, out=paste0("analysis/results/", modeltype, "/lmer_bms11_", modeltype, ".tex"))
 class(lmer.fitre_2) <- "lmerMod"
-stargazer(lmer.fitre_2, out=paste0("analysis/results/", modeltype, "/lmer_pca6_", modeltype, ".tex"))
+stargazer(lmer.fitre_2, out=paste0("analysis/results/", modeltype, "/lmer_bms6_", modeltype, ".tex"))
 class(lmer.fitre_3) <- "lmerMod"
 stargazer(lmer.fitre_3, out=paste0("analysis/results/", modeltype, "/lmer_pcamin_", modeltype, ".tex"))
-stargazer(all_results, out=paste0("analysis/results/", modeltype, "/r2_results_", modeltype, ".tex"))
+stargazer(all_results, out=paste0("analysis/results/", modeltype, "/r2_results_", modeltype, ".tex"), summary=F)
 ```

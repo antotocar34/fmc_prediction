@@ -47,9 +47,9 @@ scree
 ```{r}
 summary(pca)
 xpca <- as.data.frame(summary(pca)$importance)
-deco <- decomp(data=X, ncomps=22, nvars=25)
-stargazer(xpca, out="analysis/results/pca/pca_summary.tex")
-stargazer(t(deco), out="analysis/results/pca/pca_components.tex")
+deco <- decomp(data=X, ncomps=7, nvars=20)
+stargazer(t(xpca[,1:22]), out="pca_summary.tex", summary = F)
+stargazer(t(deco), out="pca_components.tex")
 ```
 ```{r}
 subdata <- subset(data, Fuel == fuels[4], select = which(names(data)!="Fuel"))

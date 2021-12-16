@@ -1,0 +1,30 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(plyr)
+library(ggplot2)
+library(glmnet)
+library(mombf)
+library(rstanarm)
+library(caret)
+library(rstan)
+library(lme4)
+library(blme)
+library(fixest)
+library(splitTools)
+library(arm)
+library(merTools)
+library(stargazer)
+library(lmerTest)
+library(sjstats)
+library(gridExtra)
+PATH = "/home/clinton/Documents/statistical_inference/stat_proj/fmc_prediction/code"
+```
+```{r}
+
+```
+
