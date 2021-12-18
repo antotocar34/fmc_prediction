@@ -9,7 +9,8 @@ from datetime import date, datetime
 from tqdm import tqdm
 # %%
 # STATS_PROJ = "/home/carneca/Documents/College/masters/semester1/stats/assignment/fmc_prediction"
-STATS_PROJ = f"{os.path.dirname(os.path.realpath(__file__))}/../../.."
+STATS_PROJ = os.getenv("STATS_PROJ")
+# STATS_PROJ = f"{os.path.dirname(os.path.realpath(__file__))}/../../.."
 # %%
 def inspect_date_column(df, date_col_str: str):
     dates = df[date_col_str]
@@ -19,7 +20,7 @@ def inspect_date_column(df, date_col_str: str):
     print(f"Max date: {max_date}")
     print(f"Unique dates: {len(dates.unique())}")
 # %%
-data_loc = Path(f"{STATS_PROJ}/code/data/processed_data/socc_synoptic_complete.pkl")
+data_loc = Path(f"{STATS_PROJ}/code/data/processed_data/archive/socc_synoptic_complete.pkl")
 assert data_loc.exists()
 with open(data_loc, 'rb') as f:
     synoptic_df = pickle.load(f)
@@ -77,7 +78,7 @@ socc_ndvi["ndvi_time_lag"] = (socc_ndvi["Date"] - socc_ndvi["ndvidate"]).dt.days
 socc_ndvi = socc_ndvi.drop(["date", "ndvidate", "coord", "Zip", "Longitude", "Latitude", "scientificname"], axis=1)
 
 #%%
-socc_synoptic = pd.read_pickle(f"{STATS_PROJ}/code/data/processed_data/socc_synoptic_complete.pkl")
+socc_synoptic = pd.read_pickle(f"{STATS_PROJ}/code/data/processed_data/archive/socc_synoptic_complete.pkl")
 socc_synoptic["Fuel"] = socc_synoptic["Fuel"].apply(lambda x: x.lower())
 
 socc_total = pd.merge(socc_synoptic, socc_ndvi.drop(["State", "GACC", "Group", "Percent"], axis=1), on=["Site", "Date", "Fuel"], how="inner")

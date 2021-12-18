@@ -59,7 +59,9 @@ data = aggregate(.~Site + Fuel + Date, data=data, FUN=mean)
 ```{r}
 drop_cols = c("Site", "Date", "station_distance") #Fields to exclude from processing
 drop_fuels= c("Red Shank", "Manzanita, Eastwoods", "Brittlebrush") #Fuels to exclude from processing
-method=c('knnImpute', 'YeoJohnson', 'center', 'scale') #preprocessing pipeline
+method=c('knnImpute')
+         #'center', 
+         #'scale') #preprocessing pipeline
 
 inds <- partition(data$Fuel, p=c(train=0.8, test=0.2))
 train <- data[inds$train,]

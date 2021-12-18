@@ -10,8 +10,6 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-
-
 knitr::opts_chunk$set(echo = TRUE, cache=TRUE)
 library(tidyverse)
 library(ggplot2)
@@ -24,7 +22,7 @@ knitr::opts_knit$set(root.dir = PATH)
 ```
 
 ```{r}
-setwd(PATH)
+setcwd(PATH)
 data = read.csv("data/processed_data/socc_synoptic_complete_interacted.csv")
 
 ```

@@ -247,11 +247,15 @@ names(all_results) <- c("Fuels", modelnames)
 ```{r}
 #plot a lmer pred with PI values. can use ols predict(model, data, interval="confidence)
 #pass result from either that or predictInterval(lmer.fit, data) to this function
+# data <- df of 3 columns
+#     fit <- estaimte
+#     upr
+#     lwr
 plot_lmer_pred <- function(data, title){
   plot <- ggplot(data=data) +
     geom_point(mapping=aes(x=1:nrow(data), y = fit), size=1) +
     geom_point(mapping=aes(x=1:nrow(data), y = Percent), color="red", size=1) +
-    geom_linerange(mapping=aes(x=1:nrow(data), ymin=lwr, ymax=upr), alpha=0.5) +
+    geom_linerange(mapping=aes(x=1:nrow(data), ymin=lwr, ymax=upr), alpha=0.5) + # error bar change
     geom_hline(yintercept=79, linetype="dashed", color="blue") + 
     xlab("Observations") + ylab("Predictions and 95% PI") + 
     ggtitle(paste0("Predictions for ", title)) + theme_classic()
