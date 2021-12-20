@@ -1,0 +1,118 @@
+---
+title: "Mixed Effects Plotting"
+author: "Clinton Leung"
+date: "15/12/2021"
+output: html_document
+---
+```{r}
+library(tidyverse)
+library(plyr)
+library(ggplot2)
+library(gridExtra)
+library(knitr)
+library(scales)
+library(grid)
+PATH = "/home/clinton/Documents/statistical_inference/stat_proj/fmc_prediction/code"
+knitr::opts_knit$set(PATH)
+load("~/Documents/statistical_inference/stat_proj/fmc_prediction/code/analysis/results/pca/pca_prediction_results_only.RData")
+load("~/Documents/statistical_inference/stat_proj/fmc_prediction/code/analysis/results/bms/bms_prediction_results_only.RData")
+```
+
+
+```{r, eval=FALSE}
+all_results <- pca_all_results
+all_results$Fuels <- as.factor(all_results$Fuels)
+melt_res <- melt(all_results, id="Fuels")
+r2_plot <- ggplot(mapping=aes(x=variable, y = value, color=Fuels, group=Fuels, linetype = ifelse(Fuels == "Total","dashed","solid")), data=melt_res) +
+  geom_point() + guides(linetype="none") + 
+  geom_line() + ylab("R2") + theme_classic() + theme(legend.position="bottom", legend.margin=margin(), legend.box="vertical",  axis.title.x=element_blank()) + guides(colour = guide_legend(nrow = 3))
+  #+ ggtitle("R2 for predictions using PCA")
+r2_plot
+
+#ggsave(r2_plot, file=paste0("analysis/results/bms/figs/", modeltype, "_R2.png"), width=18, height=10, units="cm")
+
+```
+```{r}
+#plot a lmer pred with PI values. can use ols predict(model, data, interval="confidence)
+#pass result from either that or predictInterval(lmer.fit, data) to this function
+#obs is first n number of observations to plot
+plot_lmer_pred <- function(df, obs, color){
+  data <- df[obs,]
+  plot <- ggplot(data=data) +
+    geom_linerange(mapping=aes(x=1:nrow(data), ymin=lwr, ymax=upr), color="black", alpha=0.5) +
+    geom_point(mapping=aes(x=1:nrow(data), y = fit), color=color, size=1) +
+    geom_point(mapping=aes(x=1:nrow(data), y = Percent), color="red", size=1) +
+    geom_hline(yintercept=79, linetype="dashed", color="blue") + 
+    xlab("Observations") + ylab("Predictions and 95% PI") + theme_classic()
+    #+ ggtitle(paste0("Predictions for ", title)) 
+  return(plot)
+}
+plot_all_species <- function(pred, test, prefix){
+  fitted <- cbind(pred, test)
+  fuels <- as.character(distinct(fitted, Fuel)[,1])
+  for (fuel in fuels){
+    fitted_fuel <- subset(fitted, Fuel==fuel, select=c("Percent", "Fuel", "fit", "upr", "lwr"))
+    plot <- plot_lmer_pred(fitted_fuel, color="black")
+    ggsave(plot, file=paste0("analysis/results/", modeltype, "/figs/", prefix, fuel, ".png"), width=14, height=10, units="cm")
+  }
+}
+combine_predictions_for_plot <- function(predictions, test, fuel){
+  data = cbind(predictions, test)
+  names = c()
+  for (i in 1:length(predictions)){
+    names = c(names, paste0("fit", i), paste0("upr", i), paste0("lwr", i))
+  }
+  names = c(names, names(test))
+  names(data) <- names
+  data = data %>% filter(Fuel == fuel)
+  return(data)
+}
+
+
+plot_compare_pred <- function(predictions, test, fuel, modelnames, colors){
+  data <- combine_predictions_for_plot(predictions, test, fuel)
+  plot <- ggplot(data=data) +
+    geom_point(mapping=aes(x=nrow(data), y = Percent), color="red", size=1) +
+    geom_hline(yintercept=79, linetype="dashed", color="grey") + 
+    xlab("Observations") + ylab("Predictions and 95% PI") + theme_classic()
+  for (i in seq(1:length(predictions))){
+    gg.data <- data.frame(fit = data[,(3 * i - 2)], upr = data[,(3 * i)], lwr = data[,(3 * i - 1)])
+    plot = plot + geom_point(data = gg.data, mapping=aes(x=1:nrow(data), y = fit), color = colors[i], size=1) +
+    geom_errorbar(data = gg.data, mapping=aes(x=1:nrow(data), ymin=lwr, ymax=upr), color = colors[i], width=0.5, alpha=0.6)
+  }
+  return(plot)
+}
+plot_grid_pred <- function(predictions, test, obs, fuel, modelnames, colors, cols=2){
+  plots <- list()
+  for (i in 1:length(predictions)){
+    data <- cbind(predictions[i], test)
+    data <- data %>% filter(Fuel==fuel)
+    plots[[i]] <- plot_lmer_pred(data, obs, colors[i]) + theme(axis.title.y=element_blank(), axis.title.x=element_blank(), legend.position="none", plot.title = element_text(size=9)) + labs(title=modelnames[i])
+  }
+  grid <- grid.arrange(arrangeGrob(grobs=plots, bottom=textGrob("Observations", gp=gpar(fontsize=9)), left=textGrob("LFMC (Percent with 95% Intervals)", rot=90, gp=gpar(fontsize=9)), ncol=cols))
+  return(grid)
+}
+```
+```{r}
+models <- c("OLS of 22 of PCs Unpooled", "PCA Varying Slope of 22 PCs")
+predictions <- list(pca_ols_unpooled, pca_pc_all)
+colors <- c("green", "orange", "turquoise2", "purple")
+g2 <- plot_grid_pred(predictions, pca_test, 1:100, "chamise", models, colors=c("purple", "chartreuse4"), cols=1)
+g4 <- plot_grid_pred(list(bms_var_slope_11, pca_pc_all), pca_test, 1:41, "sage, black", modelnames=c("BMS Varying Slope of 11 Vars", "PCA Varying Slope of 22 PCs"), colors=colors, cols=1)
+```
+```{r}
+savepath="~/Documents/statistical_inference/stat_proj/fmc_prediction/code/analysis/results"
+
+ggsave(paste0(savepath, "/sageblack_bms_pca_comparison_sageblack.png"), plot=g4, dpi="print")
+ggsave(paste0(savepath, "/sageblack_ols_pca_comparison_chamise.png"), plot=g2, dpi="print")
+```
+
+```{r, eval=F}
+plot_all_species(olspooledpred, test, "olspooledpred_")
+plot_all_species(olsunpooledpred, test, "olsunpooledpred_")
+plot_all_species(lmerfepred, test, "lmerfe_")
+plot_all_species(lmerrepred, test, "lmer_re1_")
+plot_all_species(lmerre2pred, test, "lmer_re2_")
+#plot_all_species(lmerre3pred, test, "lmer_pcmin_")
+```
+

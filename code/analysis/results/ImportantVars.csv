@@ -1,0 +1,25 @@
+"buckwheat, eastern mojave","ceanothus, bigpod","ceanothus, hoaryleaf",chamise,"Chamise, new growth","sage, black","sagebrush, black","sagebrush, california","sage, purple",ALL
+solar_rad_avg_MEAN7,solar_rad_max_MEAN7,solar_rad_max_MEAN7,rel_humid_min,solar_rad_max_MEAN15,temp_max_MEAN15,BUI,DC,temp_min_MEAN15,SLA_ANDVI
+D_solar_rad_max,D_rel_humid_min_MEAN15,solar_rad_avg_MEAN7,DC,D_wind_speed_max,evap_pot_MEAN15,solar_rad_max,D,DC,plant_height_ANDVI
+D_solar_rad_avg,BUI,rel_humid_MEAN7,D_temp_avg,DMC,D_solar_rad_avg_MEAN7,DMC,temp_max_MEAN15,solar_rad_avg_MEAN15,leaf_phos_ANDVI
+rel_humid_MEAN15,DMC,evap_pot_MEAN7,D_temp_min,BUI,DMC,D_DC,solar_rad_max_MEAN3,solar_rad_max_MEAN15,ANDVI
+rel_humid_min_MEAN15,,evap_pot_MEAN15,D_solar_rad_avg,D_solar_rad_max_MEAN15,D_rel_humid_min_MEAN15,temp_min_MEAN15,D_solar_rad_max_MEAN3,rel_humid_MEAN15,station_elevation
+rel_humid,,D_solar_rad_avg_MEAN7,solar_rad_avg,rel_humid_min_MEAN15,solar_rad_avg_MEAN15,D_temp_avg_MEAN3,D_temp_avg_MEAN15,temp_max_MEAN15,temp_max_MEAN15
+,,solar_rad_max_MEAN3,temp_min_MEAN15,D_evap_pot_MEAN15,BUI,D_temp_max_MEAN3,temp_avg_MEAN15,D_wind_speed_avg_MEAN15,BUI
+,,temp_avg_MEAN15,evap_pot_MEAN7,ANDVI,D_rel_humid_min_MEAN7,DC,D_rel_humid_min,temp_avg_MEAN15,DMC
+,,,solar_rad_max_MEAN7,D_rel_humid_MEAN15,,D_BUI,D_wind_speed_max_MEAN7,,rel_humid_min
+,,,rel_humid_min_MEAN7,solar_rad_max,,,,,evap_pot_MEAN15
+,,,ANDVI,D_evap_pot_MEAN15,,,,,D_evap_pot_MEAN15
+,,,D_solar_rad_max_MEAN7,SLA_ANDVI,,,,,D_rel_humid_min_MEAN15
+,,,wind_speed_avg_MEAN15,,,,,,solar_rad_max_MEAN15
+,,,D_evap_pot_MEAN15,,,,,,D_wind_speed_max_MEAN7
+,,,plant_height_ANDVI,,,,,,D_temp_max_MEAN15
+,,,D_DMC,,,,,,D_temp_avg_MEAN15
+,,,leaf_nitr_mass_ANDVI,,,,,,solar_rad_max_MEAN15
+,,,D_BUI,,,,,,D_DC
+,,,D_rel_humid_min_MEAN15,,,,,,D_temp_min_MEAN15
+,,,solar_rad_max_MEAN15,,,,,,D_solar_rad_max_MEAN15
+,,,,,,,,,D_solar_rad_max_MEAN7
+,,,,,,,,,evap_pot_MEAN3
+,,,,,,,,,solar_rad_avg
+,,,,,,,,,D

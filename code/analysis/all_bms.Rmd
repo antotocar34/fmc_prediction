@@ -57,7 +57,7 @@ data <- data[,-which(names(data) %in% c("X", "AccSpeciesID", "nearest_stid", "Gr
 data = aggregate(.~Site + Fuel + Date, data=data, FUN=mean)
 ```
 ```{r}
-drop_cols = c("Site", "Date", "station_distance") #Fields to exclude from processing
+drop_cols = c("Site", "Date", "station_distance") # Fields to exclude from processing
 drop_fuels= c("Red Shank", "Manzanita, Eastwoods", "Brittlebrush") #Fuels to exclude from processing
 method=c('knnImpute')
          #'center', 

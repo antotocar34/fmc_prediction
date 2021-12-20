@@ -9,8 +9,7 @@ output:
     number_sections:TRUE
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, cache=TRUE)
+```{r}
 library(tidyverse)
 library(plyr)
 library(ggplot2)
@@ -28,8 +27,9 @@ library(merTools)
 library(stargazer)
 library(lmerTest)
 library(sjstats)
+library(gridExtra)
+library(irr)
 PATH = "/home/clinton/Documents/statistical_inference/stat_proj/fmc_prediction/code"
-knitr::opts_knit$set(root.dir = PATH)
 ```
 
 ```{r}
@@ -45,37 +45,30 @@ colmeans <- function(frame){
 }
 
 
-get_formula <- function(df, include, shared_fx, exclude, select=c(),  type){
-  xs = paste(include[-which(include %in% exclude)], collapse = " + ")
-  shared = paste(shared_fx, collapse= " + ")
+get_formula <- function(df, fix_ef=c(), ran_ef=c(), type){
   target = "Percent ~"
-  if ("all" %in% select){
-  select = xs
+  all_ef = paste(union(fix_ef, ran_ef), collapse="+")
+  if (is_empty(fix_ef)){
+    fix_ef <- 1
   }
   else{
-    select = paste(select, collapse="+")
-    xs = paste(include[-which(include %in% c(select,exclude))], collapse = " + ")
+    fix_ef = paste(fix_ef, collapse="+")
   }
+  ran_ef <- paste(ran_ef, collapse="+")
   if (type=="fixest_RE"){
-    if (is_empty(paste(c(shared, xs), collapse="+"))==TRUE){
-      formula <- as.formula(paste(target, "1 | Fuel[", select, "]", collapse = " "))
-    }
-    else{
-      formula <- as.formula(paste(target, paste(c(shared, xs), collapse= "+"),  "| Fuel[", select, "]", collapse = " "))
-    }
+    formula <- as.formula(paste(target, fix_ef,  "| Fuel[", ran_ef , "]", collapse = " "))
   }
   else if(type=="fixest_FE"){
-    formula <- as.formula(paste(target, paste(c(shared, xs), collapse= "+"), "| Fuel", collapse = " "))
-  }
-  else if(type=="bayes"){
-    formula <- as.formula(paste(c(target, paste(c(shared, xs), collapse= "+")), collapse = " "))
+    formula <- as.formula(paste(target, all_ef, "| Fuel", collapse = " "))
   }
   else if(type=="lmer_RE"){
-    formula <- as.formula(paste(target, paste(c(shared, xs), collapse= "+"), "+ (1 +", paste(select, collapse="+"), "| Fuel)", collapse = " "))
-    
+    formula <- as.formula(paste(target, fix_ef, "+ (1 +", ran_ef, "| Fuel)", collapse = " "))
   }
   else if(type=="lmer_FE"){
-    formula <- as.formula(paste(c(target, paste(c(shared, xs), collapse= "+"), "+ (1 | Fuel)"), collapse = " "))
+    formula <- as.formula(paste(target, all_ef, "+ (1 | Fuel)", collapse = " "))
+  }
+  else if (type=="OLS"){
+    formula <- as.formula(paste(target, all_ef, collapse=" "))
   }
   return(formula)
 }
@@ -116,10 +109,13 @@ cross_validate <- function(fun, target, formula, data, folds=10, use_posterior=F
 
 ```{r}
 setwd(PATH)
+vars = read.csv("analysis/results/ImportantVars.csv")
 data = read.csv("data/processed_data/socc_ndvi_postprocess.csv")
 data <- data[,-which(names(data) %in% c("X", "AccSpeciesID", "nearest_stid", "Group"))]
 data = aggregate(.~Site + Fuel + Date, data=data, FUN=mean)
 ```
+
+
 
 
 ```{r}
@@ -138,7 +134,7 @@ train <- subset(train, !(Fuel %in% drop_fuels))
 train$Fuel <- as.factor(train$Fuel)
 y <- train[,which(names(train) ==target)]
 X = train[,which(names(train) != target)]
-preproc <- preProcess(X, method=c('knnImpute', 'pca')) #Preprocessing pipeline
+preproc <- preProcess(X, method=c('knnImpute', 'scale', 'pca')) #Preprocessing pipeline
 X <- predict(preproc, newdata=X)
 train <- cbind(y, X)
 names(train)[names(train) == "y"] <- target
@@ -154,36 +150,37 @@ names(test)[names(test) == "y"] <- target
 
 ```
 
-```{r, eval=FALSE, echo=FALSE}
-msfit <- modelSelection(Percent ~ . - Fuel, data=train, priorCoef=zellnerprior(taustd=1), priorDelta=modelbbprior(1,1))
-top_vars = c()
-top5 <- postProb(msfit)[1:5,1]
-top_vars = as.numeric(unlist(as.list(strsplit(top5[1], ","))))
-for (model in top5){
-  model_vars <- as.vector(as.numeric(unlist(as.list(strsplit(model, ",")))))
-  top_vars <- intersect(top_vars, model_vars)
-}
-top_vars
+```{r, eval=FALSE}
+u_vars <- unique(as.vector(as.matrix(vars[,1:9])))
+u_vars <- u_vars[u_vars != ""]
+fixed_ef <- as.vector(as.matrix(vars$ALL))
+varying_slope <- setdiff(u_vars, fixed_ef)
+all_vars <- union(u_vars, fixed_ef)
+
+
+correlations <- as.data.frame(cor(train[,varying_slope]))
+hc <- findCorrelation(as.matrix(correlations), cutoff=0.90)
+varying_slope[-hc]
+
 ```
 
 ```{r}
+PCA_fix_ef = paste0("PC", 1:22)
+PCA_ran_ef = paste0("PC", 1:6)
+PCA_ran_ef2 = c("PC1", "PC3", "PC5", "PC6")
+fix_ef = setdiff(all_vars, varying_slope[-hc]) #Fixed effects
+ran_ef = varying_slope[-hc] #Random Effects
 
-shared_fx = c()#c("station_distance", "station_elevation", "D") #Shared features by all.
-exclude_from_FE = c(c("Percent", "Fuel"), shared_fx) #All features except these will be used as random effects
-#select = c('station_elevation','solar_rad_max','precip','DC','DMC','solar_rad_max_MEAN3','rel_humid_min_MEAN15','rel_humid_MEAN3','wind_speed_max_MEAN3','temp_max_MEAN7','temp_avg_MEAN7','evap_pot_MEAN3') 
-select="all" #For LMER Random effects, only these features will be used. If "all" is passed, then all available features will be used. 
-include=names(train)
+FE_formula <- get_formula(train, fix_ef=fix_ef, ran_ef=ran_ef, type="fixest_FE")
+RE_formula <- get_formula(train, fix_ef=fix_ef, ran_ef=ran_ef, type="fixest_RE")
+lmerFE_formula <- get_formula(train, fix_ef=fix_ef, ran_ef=ran_ef, type="lmer_FE")
+lmerRE_formula <- get_formula(train, fix_ef=PCA_fix_ef, ran_ef=PCA_fix_ef, type="lmer_RE")
+lmerRE_formula2 <- get_formula(train, fix_ef=PCA_fix_ef, ran_ef=PCA_ran_ef, type="lmer_RE")
+lmerRE_formula3 <- get_formula(train, fix_ef=PCA_fix_ef, ran_ef=PCA_ran_ef2, type="lmer_RE")
+OLS_formula <- get_formula(train, fix_ef=fix_ef, ran_ef=ran_ef, type="OLS")
+OLSunpooled_formula <- get_formula(train, union(all_vars, c("Fuel")), ran_ef=ran_ef, type="OLS")
+```
 
-FE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, type="fixest_FE")
-RE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, select=select, type="fixest_RE")
-bayes_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, type="bayes")
-lmerFE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, type="lmer_FE")
-lmerRE_formula <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, select=select, type="lmer_RE")
-```
-```{r}
-lmerRE_formula2 <- get_formula(train, include=include, exclude=exclude_from_FE, shared_fx=shared_fx, select=c("PC3", "PC5", "PC6", "PC8", "PC9", "PC10", "PC11", "PC14", "PC15", "PC16", "PC17", "PC18", "PC19", "PC20", "PC21", "PC22"), type="lmer_RE")
-lmer.fitre_2 <- lmer(formula=lmerRE_formula2, data=train)
-```
 
 
 
@@ -191,37 +188,60 @@ lmer.fitre_2 <- lmer(formula=lmerRE_formula2, data=train)
 ```{r message=FALSE, eval=F, echo=F}
 feols.re = cross_validate(feols, "Percent", formula=RE_formula, train)
 feols.fe = cross_validate(feols, "Percent", formula=FE_formula, train)
-feglm.re = cross_va2lidate(feglm, "Percent", formula=RE_formula, train)
+feglm.re = cross_validate(feglm, "Percent", formula=RE_formula, train)
 feglm.fe = cross_validate(feglm, "Percent", formula=FE_formula, train)
-#bayesres = cross_validate(stan_glm, "Percent", formula=bayes_formula, data=train, use_posterior=T)D
-olsres = cross_validate(lm, "Percent", formula=as.formula("Percent~."), data = train)
+olsres = cross_validate(lm, "Percent", formula=OLS_formula, data = train)
 lmer.fe = cross_validate(lmer, "Percent", formula=lmerFE_formula, data=train, folds=10)
-lmer.re = cross_validate(lmer, "Percent", formula=lmerRE_formula, data=train, folds=10)
+lmer.re = cross_validate(lmer, "Percent", formula=lmerRE_formula2, data=train, folds=10)
 ```
 
-```{r}
-ols.fitunpooled <- lm(Percent~ ., data=train)
+```{r, echo=FALSE, results='hide'}
+ols.pooled <- lm(formula=OLS_formula, data=train)
+ols.unpooled <- lm(formula = OLSunpooled_formula, data=train)
 lmer.fitfe <- lmer(formula=lmerFE_formula, data=train)
-lmer.fitre <- lmer(formula=lmerRE_formula, data=train)
+lmer.fitre <- lmer(formula=lmerRE_formula, data=train, control=lmerControl(                               optCtrl=list(maxfun=2e5)), verbose = F)
+lmer.fitre_2 <- lmer(formula=lmerRE_formula2, data=train, control=lmerControl(                               optCtrl=list(maxfun=2e5)), verbose = F)
+lmer.fitre_3 <- lmer(formula=lmerRE_formula3, data=train, control=lmerControl(                               optCtrl=list(maxfun=2e5)), verbose = F)
+```
+
+```{r}
+lmeranova <- ranova(lmer.fitre)
+stargazer(lmeranova, out="analysis/results/bms/lmer_anova_bms.tex", summary=F)
+```
+
+```{r, echo=FALSE, eval=FALSE}
+anova_del <- c("D_rel_humid_min", "rel_humid", "solar_rad_max_MEAN3", "solar_rad_max", "leaf_nitr_mass_ANDVI")
+ran_ef2 <- setdiff(ran_ef, anova_del)
+fix_ef2 <- setdiff(PCA_fix_ef, ran_ef2)
+
+lmerRE_formula2 <- get_formula(train, fix_ef=all_vars, ran_ef=ran_ef2, type="lmer_RE")
+lmer.fitre_2 <- lmer(formula=lmerRE_formula2, data=train, control=lmerControl(optCtrl = list(maxfun=2e5)))
 ```
 ```{r}
-modelnames <- c("OLS", "lmer.fe", "lmer.re")
+lmeranova2 <- ranova(lmer.fitre_2)
+stargazer(lmeranova2, out="analysis/results/pca/lmer_anova_pca_2.tex", summary = F)
+```
 
-olspred <- predict(ols.fitunpooled, test, interval="confidence")
+```{r}
+modelnames <- c("OLS Pooled", "OLS Unpooled", "Intercept Only", "PC 22", "PC 6", "PC Min")
+modelnames <- c("OLS Pooled", "OLS Unpooled", "Intercept Only", "BMS Vars 1", "BMS Vars 2")
+
+olspooledpred <- predict(ols.pooled, test, interval="confidence")
+olsunpooledpred <- predict(ols.unpooled, test, interval="confidence")
 lmerfepred <- predictInterval(lmer.fitfe, newdata=test)
 lmerrepred <- predictInterval(lmer.fitre, newdata=test)
+lmerre2pred <- predictInterval(lmer.fitre_2, newdata=test)
+#lmerre3pred <- predictInterval(lmer.fitre_3, newdata=test)
 
 ```
 
-```{r}
-icc(lmer.fitfe)
-icc(lmer.fitre)
-ranova(lmer.fitre)
-```
+
 
 
 ```{r}
 #GET R2 for each group, pass just the prediction column as predictions
+modeltype = "bms"
+
 get_group_stat <- function(predictions, testdata){
   fuels <- as.character(distinct(testdata, Fuel)[,1])
   df <- cbind(predictions[,1], testdata)
@@ -232,46 +252,137 @@ get_group_stat <- function(predictions, testdata){
     ytrue = set[,"Percent"]
     results = c(results, compute_r2(ytrue, ypred))
   }
+  results <- c(results, compute_r2(df[,"Percent"], df[,1]))
+  fuels <- c(fuels, "Total")
   results = data.frame(fuels, results)
   return(results)
 }
-ols.results <- get_group_stat(olspred, test)
+olspooled.results <- get_group_stat(olspooledpred, test)
+olsunpooled.results <- get_group_stat(olsunpooledpred, test)
 lmerfe.results <- get_group_stat(lmerfepred, test)
 lmerre.results <- get_group_stat(lmerrepred, test)
+lmerre2.results <- get_group_stat(lmerre2pred, test)
+#lmerre3.results <- get_group_stat(lmerre3pred, test)
 
-all_results <- merge(ols.results, lmerfe.results, by="fuels")
+all_results <- merge(olspooled.results, olsunpooled.results, by="fuels")
+all_results <- merge(all_results, lmerfe.results, by="fuels")
 all_results <- merge(all_results, lmerre.results, by="fuels")
+all_results <- merge(all_results, lmerre2.results, by="fuels")
+#all_results <- merge(all_results, lmerre3.results, by="fuels")
 names(all_results) <- c("Fuels", modelnames)
 
 ```
 ```{r}
+all_results$Fuels <- as.factor(all_results$Fuels)
+melt_res <- melt(all_results, id="Fuels")
+r2_plot <- ggplot(mapping=aes(x=variable, y = value, color=Fuels, group=Fuels, linetype = ifelse(Fuels == "Total","dashed","solid")), data=melt_res) +
+  geom_point() + guides(linetype="none") + 
+  geom_line() + ylab("R2") + theme_classic() + theme(legend.position="bottom", legend.margin=margin(), legend.box="vertical",  axis.title.x=element_blank()) + guides(colour = guide_legend(nrow = 3))
+  #+ ggtitle("R2 for predictions using PCA")
+r2_plot
+
+ggsave(r2_plot, file=paste0("analysis/results/bms/figs/", modeltype, "_R2.png"), width=18, height=10, units="cm")
+
+```
+
+
+```{r}
 #plot a lmer pred with PI values. can use ols predict(model, data, interval="confidence)
 #pass result from either that or predictInterval(lmer.fit, data) to this function
-# data <- df of 3 columns
-#     fit <- estaimte
-#     upr
-#     lwr
-plot_lmer_pred <- function(data, title){
+plot_lmer_pred <- function(data, color){
   plot <- ggplot(data=data) +
-    geom_point(mapping=aes(x=1:nrow(data), y = fit), size=1) +
+    geom_linerange(mapping=aes(x=1:nrow(data), ymin=lwr, ymax=upr), color="black", alpha=0.5) +
+    geom_point(mapping=aes(x=1:nrow(data), y = fit), color=color, size=1) +
     geom_point(mapping=aes(x=1:nrow(data), y = Percent), color="red", size=1) +
-    geom_linerange(mapping=aes(x=1:nrow(data), ymin=lwr, ymax=upr), alpha=0.5) + # error bar change
     geom_hline(yintercept=79, linetype="dashed", color="blue") + 
-    xlab("Observations") + ylab("Predictions and 95% PI") + 
-    ggtitle(paste0("Predictions for ", title)) + theme_classic()
+    xlab("Observations") + ylab("Predictions and 95% PI") + theme_classic()
+    #+ ggtitle(paste0("Predictions for ", title)) 
   return(plot)
 }
-plot_all_species <- function(pred, test, suffix){
+plot_all_species <- function(pred, test, prefix){
   fitted <- cbind(pred, test)
   fuels <- as.character(distinct(fitted, Fuel)[,1])
   for (fuel in fuels){
     fitted_fuel <- subset(fitted, Fuel==fuel, select=c("Percent", "Fuel", "fit", "upr", "lwr"))
-    plot <- plot_lmer_pred(fitted_fuel, fuel)
-    ggsave(plot, file=paste0("analysis/results/pca/plot_", fuel, suffix, ".png"), width=14, height=10, units="cm")
+    plot <- plot_lmer_pred(fitted_fuel, color="black")
+    ggsave(plot, file=paste0("analysis/results/", modeltype, "/figs/", prefix, fuel, ".png"), width=14, height=10, units="cm")
   }
 }
+combine_predictions_for_plot <- function(predictions, test, fuel){
+  data = cbind(predictions, test)
+  names = c()
+  for (i in 1:length(predictions)){
+    names = c(names, paste0("fit", i), paste0("upr", i), paste0("lwr", i))
+  }
+  names = c(names, names(test))
+  names(data) <- names
+  data = data %>% filter(Fuel == fuel)
+  return(data)
+}
 
-plot_all_species(lmerrepred, test, "_lmerre")
-#plot = plot_lmer_pred(chamisefitted, "chamise")
-#plot
+
+plot_compare_pred <- function(predictions, test, fuel, modelnames, colors){
+  data <- combine_predictions_for_plot(predictions, test, fuel)
+  plot <- ggplot(data=data) +
+    geom_point(mapping=aes(x=1:nrow(data), y = Percent), color="red", size=1) +
+    geom_hline(yintercept=79, linetype="dashed", color="grey") + 
+    xlab("Observations") + ylab("Predictions and 95% PI") + theme_classic()
+  for (i in seq(1:length(predictions))){
+    gg.data <- data.frame(fit = data[,(3 * i - 2)], upr = data[,(3 * i)], lwr = data[,(3 * i - 1)])
+    plot = plot + geom_point(data = gg.data, mapping=aes(x=1:nrow(data), y = fit), color = colors[i], size=1) +
+    geom_errorbar(data = gg.data, mapping=aes(x=1:nrow(data), ymin=lwr, ymax=upr), color = colors[i], width=0.5, alpha=0.6)
+  }
+  return(plot)
+}
+plot_grid_pred <- function(predictions, test, fuel, modelnames, colors, cols=2){
+  plots <- list()
+  for (i in 1:length(predictions)){
+    data <- cbind(predictions[i], test)
+    data <- data %>% filter(Fuel==fuel)
+    plots[[i]] <- plot_lmer_pred(data, colors[i]) + theme(axis.title.y=element_blank(), axis.title.x=element_blank(), legend.position="none", plot.title = element_text(size=10)) + labs(title=modelnames[i])
+  }
+  grid <- grid.arrange(grobs=plots, ncol=cols)
+  return(grid)
+}
+```
+```{r}
+models <- c("PCA Min", "BMS 11 Var Slope")
+predictions <- list(pca_pc_all, bms_var_slope_11)
+colors <- c("green", "orange", "turquoise2", "purple")
+grid <- plot_grid_pred(predictions, pca_test, "buckwheat, eastern mojave", models, colors, cols=1)
+```
+
+```{r}
+plot_all_species(olspooledpred, test, "olspooledpred_")
+plot_all_species(olsunpooledpred, test, "olsunpooledpred_")
+plot_all_species(lmerfepred, test, "lmerfe_")
+plot_all_species(lmerrepred, test, "lmer_re1_")
+plot_all_species(lmerre2pred, test, "lmer_re2_")
+#plot_all_species(lmerre3pred, test, "lmer_pcmin_")
+```
+
+```{r}
+
+predictions <- list(lmerrepred, olsunpooledpred)
+colors <- c("purple", "black")
+p1 <- plot_compare_pred(predictions, test, "sage, purple", modelnames, colors)
+p2 <- plot_compare_pred(predictions, test, "sage, black", modelnames, colors)
+p3 <- plot_compare_pred(predictions, test, "buckwheat, eastern mojave", modelnames, colors)
+p1
+p2
+p3
+```
+
+```{r}
+stargazer(ols.pooled, out=paste0("analysis/results/", modeltype, "/olspooled_", modeltype, ".tex"))
+stargazer(ols.unpooled, out=paste0("analysis/results/", modeltype, "/olsunpooled_", modeltype, ".tex"))
+class(lmer.fitfe) <- "lmerMod"
+stargazer(lmer.fitfe, out=paste0("analysis/results/", modeltype, "/lmerfe_", modeltype, ".tex"))
+class(lmer.fitre) <- "lmerMod"
+stargazer(lmer.fitre, out=paste0("analysis/results/", modeltype, "/lmer_bms11_", modeltype, ".tex"))
+class(lmer.fitre_2) <- "lmerMod"
+stargazer(lmer.fitre_2, out=paste0("analysis/results/", modeltype, "/lmer_bms6_", modeltype, ".tex"))
+class(lmer.fitre_3) <- "lmerMod"
+stargazer(lmer.fitre_3, out=paste0("analysis/results/", modeltype, "/lmer_pcamin_", modeltype, ".tex"))
+stargazer(all_results, out=paste0("analysis/results/", modeltype, "/r2_results_", modeltype, ".tex"), summary=F)
 ```

@@ -18,4 +18,3 @@ __pychache__
 
 *.env
 .fmc/*
-code/analysis/results/*
