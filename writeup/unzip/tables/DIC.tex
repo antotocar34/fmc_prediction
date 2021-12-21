@@ -1,0 +1,17 @@
+\begin{table*}[!htbp] \centering 
+\begin{tabular}{@{\extracolsep{5pt}}lccc} 
+\hline \\[-1.8ex] 
+Models & \multicolumn{1}{c}{Deviance} & \multicolumn{1}{c}{DIC} & \multicolumn{1}{c}{OOS $R^{2}$} \\
+    \hline \\[-1.8ex]
+PCA - Varying Intercept & 51438 & 52437.8 & 0.5463 \\
+PCA - Varying Intercept + 22 PCs & 49595.5 & 49606.9 & 0.6846 \\
+PCA - Varying Intercept + 6 PCs & 50088.5 & 50089.7 & 0.6696 \\
+PCA - Varying Intercept + 4 PCs & 50160.3 & 510158.4 & 0.6582 \\
+BMS - Varying Intercept & 50891.5 & 51808.8 & 0.5961 \\
+BMS - Varying Intercept + 11 Slopes & 49634.3 & 49783.2 & 0.6880 \\
+BMS - Varying Intercept + 6 Slopes & 49690.2 & 49850 & 0.6802 \\
+\hline \\[-1.8ex] 
+\end{tabular} 
+\caption{A comparison of mixed effect models' deviance, DIC and out of sample $R^{2}$. The PCA models indicate the number of first principal components used as random effects, with the exception that '4 PCs' uses principal components 1, 3, 5, and 6 chosen based on ANOVA tests. The simplest BMS model uses: $H_{mean7}$, $D_{DC}$, $T_{min15}$, $W_{mean15}$, $D:D_{DMC}$, $D:W_{max}$; and the larger model adds on: $H$, $G_{max3}$, $G_{max}$, $L_{nitro}:A_{NDVI}$.}
+\label{tab:DIC} 
+\end{table*} 
