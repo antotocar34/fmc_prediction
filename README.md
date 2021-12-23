@@ -1,9 +1,10 @@
 This is the repository for our cool project.
 
-`code` contains any code files and the data folder.
+`code` contains the following folders:
 
-`writeup` contains the latex files for the final writeup.
+`analysis` contains `all_bms.rmd` which contains the 
+analysis for the Bayesian model selection.
+It also contains the `main` folder which contains  the analysis files for 
+The hierarchical and PCA modelling.
 
-`notes` contains any notes and ideas or more generally any thoughts that need to be written down.
-
-`papers` contains all relevant papers
+The other folders contain files for data extraction, cleaning and processing.
