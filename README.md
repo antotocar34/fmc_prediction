@@ -1,5 +1,3 @@
-This is the repository for our cool project.
-
 `code` contains the following folders:
 
 `analysis` contains `all_bms.rmd` which contains the 
